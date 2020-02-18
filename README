@@ -1,0 +1,223 @@
+                                MARGE
+   Machine learning Algorithm for Radiative transfer of Generated Exoplanets
+===============================================================================
+
+
+Author :       Michael D. Himes    University of Central Florida
+Contact:       mhimes@knights.ucf.edu
+
+Advisor:       Joseph Harrington   University of Central Florida
+
+
+Acknowledgements
+----------------
+This work was funded by NASA Fellowship 80NSSC20K0682.
+We gratefully thank Nvidia Corporation for the Titan Xp GPU that was used 
+throughout development of the software.
+
+The author would like to recognize individuals whose work indirectly assisted 
+with the development of MARGE:
+Adam D. Cobb's work in developing plan-net served as inspiration for some 
+core aspects of MARGE (NN model class, training).
+Zaccheus Sheffer helped MH refactor the plan-net code; MARGE's configuration file 
+handling is based on that refactored codebase.
+
+
+Summary
+=======
+MARGE is an all-in-one package to generate exoplanet spectra across a 
+defined parameter space, process the output, and train machine learning (ML) 
+models as a fast approximation to radiative transfer (RT).
+
+MARGE is an open-source project that welcomes improvements from the community 
+to be submitted via pull requests on Github.  To be accepted, such improvements 
+must be generally consistent with the existing coding style, and all changes 
+must be updated in associated documentation.
+
+MARGE is released under a Reproducible Research License.  Users are free to 
+use the software for personal reasons.  Users publishing results from MARGE 
+or modified versions of it in a peer-reviewed journal are required to publicly 
+release all necessary code/data to reproduce the published work.  Modified 
+versions of MARGE are required to also be released open source under the same 
+Reproducible Research License.  For more details, see the text of the license.
+
+
+Files & Directories
+===================
+MARGE contains various files and directories, described here.
+
+code/           - Contains modifications to BART, transit, and MCcubed files.
+doc/            - Contains documentation for MARGE.  The User Manual contains 
+                  the information in the README, as well as a walkthrough for 
+                  setup and running an example.
+environment.yml - Contains all required packages (w/ versions) for MARGE.
+example/        - Contains example configuration files for MARGE.
+lib/            - Contains the classes and functions of MARGE.
+  callbacks.py  - Contains Keras Callback classes.
+  datagen.py    - Contains functions related to generating/processing data.
+  loader.py     - Contains functions related to loading processed data.
+  NN.py         - Contains the NN model class, and a driver function for model 
+                  training/validating/testing.
+  plotter.py    - Contains plotting functions.
+  stats.py      - Contains functions related to statistics.
+  utils.py      - Contains utiity functions used for internal processing.
+Makefile        - Handles setting up BART, and creating a TLI file.
+MARGE.py        - The executable driver for MARGE. Accepts a configuration file.
+modules/        - Contains necessary modules for data generation.
+                  Initially empty; will contain BART via the Makefile.
+README          - This file!
+
+
+Note that all .py files have complete documentation; consult a specific file 
+for more details.
+
+
+Installation
+============
+At present, MARGE is based on BART, the Bayesian Atmospheric Radiative Transfer
+(BART) code; for details, see the associated user manual in the 'doc' directory.
+
+If running MARGE in data generation mode, users must first input
+    make bart
+into a terminal to download and compile BART.  Note that MARGE modifies some 
+files in BART, so be sure to use this command rather than pulling from Github.
+
+
+Executing MARGE
+===============
+MARGE has 2 execution modes: data generation, and ML model training.
+
+As mentioned above, data generation is handled via a modified version of BART.
+Before data generation can begin, users must first generate a TLI file via 
+pylineread, BART's line list-processing code.  To do so, input
+    make TLI cfile=<path/to/configration file>
+to call pylineread with a configuration file.  For details on how to set this 
+up, see the pylineread directory within BART's RT module, transit.
+
+After generating a TLI file, data generation can begin.  After setting up the 
+MARGE configuration file, run MARGE via
+    ./MARGE.py <path/to/configuration file>
+
+Note that data generation requires a BART configuration file.  In order to save 
+the data, the BART config file must have the 'savemodel' parameter set to 
+<name>.npy.  This config file must also have the 'modelper' parameter set; this 
+controls the number of iterations per chain to save out each model file, to 
+ensure that the evaluated models will fit in memory.  If the models will fit in 
+memory as a single array, set modelper=0 to save out a single file with all 
+models.  If modelper>0, the generated .npy files will be saved to a subdirectory
+within BART's output directory, named <name> from the 'savemodel' parameter.
+
+
+ML Model Training: Data
+-----------------------
+If training an ML model using MARGE, data must be formatted a particular way.
+At present, MARGE has a single allowed format, which is a 2D array saved as a 
+.NPY file.  Each row corresponds to a unique case.  Each column corresponds to 
+the inputs followed by the outputs, e.g.,
+[input0, input1, input2, ..., output0, output1, output2, ...]
+
+Users are encouraged to introduce additions to loader.py to allow additional 
+data formats, which would be specified in the configuration file.  
+Please submit any such modifications via pull requests on Github.
+
+
+Setting Up a MARGE Configuration File
+=====================================
+A MARGE configuration file contains many options, which are detailed in this 
+section.  For an example, see config.cfg in the example subdirectory, and the 
+associated README with instructions on execution.
+
+
+Directories
+-----------
+inputdir   : str.  Directory containing MARGE inputs.
+outputdir  : str.  Directory containing MARGE outputs.
+plotdir    : str.  Subdirectory within `outputdir` containing plots produced.
+datadir    : str.  Subdirectory within `outputdir` containing processed data.
+preddir    : str.  Subdirectory within `outputdir` containing validation and 
+                   test set predictions and true values.
+
+Datagen Parameters
+------------------
+datagen    : bool. Determines whether to generate data.
+code       : str.  Determines the code to use for data generation.
+cfile      : str.  Name of the `code` configuration file for data generation.
+                   NOTE: MUST be located in `inputdir`!
+processdat : bool. Determines whether to process the generated data.
+preservedat: bool. Determines whether to preserve the unprocessed data after 
+                   completing data processing.
+                   NOTE: if True, it will PERMANENTLY DELETE the original, 
+                         unprocessed data!
+
+Neural Network (NN) Parameters
+------------------------------
+trainmodel : bool. Determines whether to use an NN model.
+resume     : bool. Determines whether to resume training a previously-trained 
+                   model.
+seed       : int.  Random seed.
+trainflag  : bool. Determines whether to train    an NN model.
+validflag  : bool. Determines whether to validate an NN model.
+testflag   : bool. Determines whether to test     an NN model.
+
+TFR_file   : str.  Prefix for the TFRecords files to be created.
+buffer     : int.  Number of batches to pre-load into memory.
+ncores     : int.  Number of CPU cores to use to load the data in parallel.
+
+normalize  : bool. Determines whether to normalize the data by its mean and 
+                   standard deviation.
+scale      : bool. Determines whether to scale the data to be within a range.
+scalelims  : floats. The min, max of the range of the scaled data.
+                     It is recommended to use -1, 1
+
+weight_file: str.  File containing NN model weights.
+                   NOTE: MUST end in .h5
+input_dim  : int.  Dimensionality of the input  to the NN.
+output_dim : int.  Dimensionality of the output of the NN.
+ilog       : bool. Determines whether to take the log10 of the input  data.
+olog       : bool. Determines whether to take the log10 of the output data.
+
+convlayers : ints. Number of nodes for each convolutional layer.
+denselayers: ints. Number of nodes for each dense         layer.
+epochs     : int.  Maximum number of iterations through the training data set.
+patience   : int.  Early-stopping criteria; stops training after `patience` 
+                   epochs of no improvement in validation loss.
+batch_size : int.  Mini-batch size for training/validation steps.
+
+lengthscale: float. Minimum learning rate.
+max_lr     : float. Maximum learning rate.
+clr_mode   : str.   Specifies the function to use for a cyclical learning rate 
+                    (CLR).
+                    'triangular' linearly increases from `lengthscale` to 
+                    `max_lr` over `clr_steps` iterations, then decreases.
+                    'triangular2' performs similar to `triangular', except that 
+                    the `max_lr` value is decreased by 2 every complete cycle,
+                    i.e., 2 * `clr_steps`.
+                    'exp_range' performs similar to 'triangular2', except that 
+                    the amplitude decreases according to an exponential based 
+                    on the epoch number, rather than the CLR cycle.
+clr_steps  : int.   Number of steps through a half-cycle of the learning rate.
+                    E.g., if using clr_mode = 'triangular' and clr_steps = 4, 
+                    Every 8 epochs will have the same learning rate.
+                    It is recommended to use an even value.
+                    For more details, see Smith (2015), Cyclical Learning Rates 
+                    for Training Neural Networks.
+
+Plotting Parameters
+-------------------
+xval_label : str.  X-axis label for plots.
+yval_label : str.  Y-axis label for plots.
+
+Statistics Files
+----------------
+fmean      : str.  Name of the file containing the mean of each input/output.
+fstdev     : str.  Name of the file containing the standard deviation of each 
+                   input/output.
+fmin       : str.  Name of the file containing the minimum of each input/output.
+fmax       : str.  Name of the file containing the maximum of each input/output.
+rmse_file  : str.  Prefix for the file to be saved containing the root mean 
+                   squared error of predictions on the validation & test data.
+r2_file    : str.  Prefix for the file to be saved containing the coefficient of
+                   determination (R^2, R-squared) of predictions on the 
+                   validation & test data.
+
+
