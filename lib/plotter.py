@@ -9,26 +9,11 @@ plot_spec: Plots the predicted spectrum, vs the true spectrum if supplied.
 
 """
 
-# -*- coding: utf-8 -*-
-
 import sys, os
-
-#import keras
-#from keras import backend as K
-#from keras.models import Sequential, Model
-#from keras.layers import Convolution1D, Dense, MaxPooling1D, Flatten, Input, Lambda, Wrapper, merge, concatenate
-#from keras.engine import InputSpec
-#from keras.layers.core import Dense, Dropout, Activation, Layer, Lambda, Flatten
-#from keras.regularizers import l2
-#from keras.optimizers import RMSprop, Adadelta, adam
-#from keras.layers.advanced_activations import LeakyReLU
-#from keras import initializers
-#import tensorflow as tf
-
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-
+import scipy.signal      as ss
 from sklearn import metrics
 
 import stats as S
@@ -163,18 +148,33 @@ def plot_spec(fname, predspec, truespec=None,
     if olog:
         predspec = 10**predspec
         truespec = 10**truespec
+    if truespec is None:
+        trans = 1.0
+    else:
+        trans = 0.5
 
     fig1   = plt.figure(1)
     frame1 = fig1.add_axes((.1, .3, .8, .6))
-    plt.plot(xvals, predspec, label='Predicted', lw=0.5)
+    plt.plot(xvals, predspec, label='Predicted', lw=0.5, alpha=trans, c='b')
     plt.ylabel(u''+ylabel, fontsize=12)
     #frame1.yaxis.set_label_coords(-0.2, 0.5)
     if truespec is not None:
-        plt.plot(xvals, truespec, label='True', ls='--', lw=0.5)
-        plt.legend(loc='best')
+        plt.plot(xvals, truespec, label='True', lw=0.5, alpha=trans, c='r')
+        predsmooth = ss.savgol_filter(predspec, 101, 3)
+        plt.plot(xvals, predsmooth, c='navy', 
+                 label='Predicted, smoothed', ls='--', lw=0.5, alpha=trans)
+        truesmooth = ss.savgol_filter(truespec, 101, 3)
+        plt.plot(xvals, truesmooth, c='maroon', 
+                 label='True, smoothed', ls='--', lw=0.5, alpha=trans)
+        plt.legend(loc='best', prop={'size': 9})
         frame1.set_xticklabels([])
         frame2 = fig1.add_axes((.1, .1, .8, .2))
-        plt.plot(xvals, 100 * (predspec - truespec) / truespec, lw=0.5)
+        plt.plot(xvals, 100 * (predspec - truespec) / truespec, lw=0.5, 
+                 alpha=0.7, label='Full resolution', c='b')
+        plt.plot(xvals, 100 * (predsmooth - truesmooth) / truesmooth, lw=0.5, 
+                 alpha=0.7, label='Smoothed', c='r')
+        plt.legend(loc='best', prop={'size': 8})
+        plt.hlines(0, np.amin(xvals), np.amax(xvals))
         yticks = frame2.yaxis.get_major_ticks()
         yticks[-1].label1.set_visible(False)
         plt.ylabel('Residuals (%)', fontsize=12)

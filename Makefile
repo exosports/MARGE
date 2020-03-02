@@ -1,7 +1,7 @@
 
 bart:
 	@if [ ! -d "./modules/BART" ]; then                                       \
-		echo "\nCloning BART..."                                              \
+		echo "\nCloning BART...";                                             \
 		git clone --recursive https://github.com/exosports/BART modules/BART/;\
 		echo "Finished cloning BART into 'modules'.\n";                       \
 		echo "Switching to the compatible BART version...";                   \

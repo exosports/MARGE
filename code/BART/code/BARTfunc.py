@@ -226,29 +226,30 @@ def main(comm):
 
   nfilters = len(ffile)  # Number of filters:
 
-  # FINDME: Separate filter/stellar interpolation?
-  # Get stellar model:
-  starfl, starwn, tmodel, gmodel = w.readkurucz(kurucz, tstar, gstar)
-  # Read and resample the filters:
-  nifilter  = [] # Normalized interpolated filter
-  istarfl   = [] # interpolated stellar flux
-  wnindices = [] # wavenumber indices used in interpolation
-  for i in np.arange(nfilters):
-    # Read filter:
-    filtwaven, filttransm = w.readfilter(ffile[i])
-    # Check that filter boundaries lie within the spectrum wn range:
-    if filtwaven[0] < specwn[0] or filtwaven[-1] > specwn[-1]:
-      mu.exit(message="Wavenumber array ({:.2f} - {:.2f} cm-1) does not "
-              "cover the filter[{:d}] wavenumber range ({:.2f} - {:.2f} "
-              "cm-1).".format(specwn[0], specwn[-1], i, filtwaven[0],
-                                                        filtwaven[-1]))
+  if walk != 'unif':
+    # FINDME: Separate filter/stellar interpolation?
+    # Get stellar model:
+    starfl, starwn, tmodel, gmodel = w.readkurucz(kurucz, tstar, gstar)
+    # Read and resample the filters:
+    nifilter  = [] # Normalized interpolated filter
+    istarfl   = [] # interpolated stellar flux
+    wnindices = [] # wavenumber indices used in interpolation
+    for i in np.arange(nfilters):
+      # Read filter:
+      filtwaven, filttransm = w.readfilter(ffile[i])
+      # Check that filter boundaries lie within the spectrum wn range:
+      if filtwaven[0] < specwn[0] or filtwaven[-1] > specwn[-1]:
+        mu.exit(message="Wavenumber array ({:.2f} - {:.2f} cm-1) does not "
+                "cover the filter[{:d}] wavenumber range ({:.2f} - {:.2f} "
+                "cm-1).".format(specwn[0], specwn[-1], i, filtwaven[0],
+                                                          filtwaven[-1]))
 
-    # Resample filter and stellar spectrum:
-    nifilt, strfl, wnind = w.resample(specwn, filtwaven, filttransm,
-                                              starwn,    starfl)
-    nifilter.append(nifilt)
-    istarfl.append(strfl)
-    wnindices.append(wnind)
+      # Resample filter and stellar spectrum:
+      nifilt, strfl, wnind = w.resample(specwn, filtwaven, filttransm,
+                                        starwn, starfl)
+      nifilter.append(nifilt)
+      istarfl.append(strfl)
+      wnindices.append(wnind)
 
   # Allocate arrays for receiving and sending data to master:
   spectrum = np.zeros(nwave, dtype='d')
@@ -322,9 +323,10 @@ def main(comm):
           bandflux[i] = w.bandintegrate(spectrum[wnindices[i]], specwn,
                                         nifilter[i], wnindices[i])
     else:
-      sinterp  = si.interp1d(starwn, starfl)
-      rstarfl  = sinterp(specwn)
-      bandflux = (spectrum / rstarfl) * rprs * rprs
+      #sinterp  = si.interp1d(starwn, starfl)
+      #rstarfl  = sinterp(specwn)
+      #bandflux = (spectrum / rstarfl) * rprs * rprs
+      bandflux = spectrum
 
     # Send results back to MCMC:
     mu.comm_gather(comm, bandflux, MPI.DOUBLE)
