@@ -1,4 +1,4 @@
-name: plannet
+name: marge
 channels:
   - conda-forge
   - http://ssb.stsci.edu/astroconda

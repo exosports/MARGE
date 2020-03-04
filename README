@@ -8,19 +8,19 @@ Contact:       mhimes@knights.ucf.edu
 
 Advisor:       Joseph Harrington   University of Central Florida
 
+Contributors:  David C. Wright
+                 - containerized the code
+               Adam D. Cobb
+                 - plan-net code inspired NN class & training
+               Zaccheus Scheffer
+                 - assisted with refactoring the codebase that led to MARGE
+
 
 Acknowledgements
 ----------------
-This work was funded by NASA Fellowship 80NSSC20K0682.
-We gratefully thank Nvidia Corporation for the Titan Xp GPU that was used 
-throughout development of the software.
-
-The author would like to recognize individuals whose work indirectly assisted 
-with the development of MARGE:
-Adam D. Cobb's work in developing plan-net served as inspiration for some 
-core aspects of MARGE (NN model class, training).
-Zaccheus Sheffer helped MH refactor the plan-net code; MARGE's configuration file 
-handling is based on that refactored codebase.
+This research was supported by the NASA Fellowship Activity under NASA Grant 
+80NSSC20K0682.  We gratefully thank Nvidia Corporation for the Titan Xp GPU 
+that was used throughout development of the software.
 
 
 Summary
@@ -81,6 +81,8 @@ If running MARGE in data generation mode, users must first input
     make bart
 into a terminal to download and compile BART.  Note that MARGE modifies some 
 files in BART, so be sure to use this command rather than pulling from Github.
+
+For more details, see the MARGE User Manual.
 
 
 Executing MARGE
@@ -206,6 +208,9 @@ Plotting Parameters
 -------------------
 xval_label : str.  X-axis label for plots.
 yval_label : str.  Y-axis label for plots.
+plot_cases : ints. Specifies which cases in the test set should be 
+                   plotted vs. the true spectrum.
+                   Note: must be separated by spaces or indented new lines.
 
 Statistics Files
 ----------------
@@ -220,4 +225,23 @@ r2_file    : str.  Prefix for the file to be saved containing the coefficient of
                    determination (R^2, R-squared) of predictions on the 
                    validation & test data.
 
+
+Versions
+========
+MARGE was developed on a Unix/Linux machine using the following 
+versions of packages:
+ - Python 3.7.2
+ - GPyOpt 1.2.5
+ - Keras 2.2.4
+ - Numpy 1.16.2
+ - Matplotlib 3.0.2
+ - mpi4py 3.0.3
+ - Scipy 1.2.1
+ - sklearn 0.20.2
+ - Tensorflow 1.13.1
+ - CUDA 9.1.85
+ - cuDNN 7.5.00
+
+MARGE also requires a working MPI distribution if using BART for 
+data generation.  MARGE was developed using MPICH version 3.3.2.
 
