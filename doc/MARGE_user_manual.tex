@@ -28,7 +28,7 @@
 \begin{flushleft}
 \large
 \emph{Authors:} \\
-Michael \textsc{Himes} \\
+Michael D. \textsc{Himes} \\
 \end{flushleft}
 \end{minipage}%
 \begin{minipage}{0.4\textwidth}
@@ -73,13 +73,14 @@ Monte Carlo (MC3) code, with a random uniform sampler to propose models within a
 defined parameter space.  Due to the possible data size, MARGE also modifies MC3
 to save out the evaluated models in batches.
 
-\noindent The detailed MARGE code documentation and User Manual are provided 
+The detailed MARGE code documentation and User Manual are provided 
 with the package to assist users in its usage. For additional support, contact 
 the lead author (see Section \ref{sec:team}).
 
-\noindent MARGE is released under the Reproducible Research Software License.  
-For details, see 
-\url{https://planets.ucf.edu/resources/reproducible-research/software-license/}.
+MARGE is released under the Reproducible Research Software License.  
+For details, see \\
+\href{https://planets.ucf.edu/resources/reproducible-research/software-license/}{https://planets.ucf.edu/resources/reproducible-research/software-license/}.
+\newline
 
 \noindent The MARGE package is organized as follows: \newline
 % The framebox and minipage are necessary because dirtree kills the
@@ -216,13 +217,13 @@ make TLI cfile=pylineread.cfg
 
 \noindent This will take a long time to run.  It will 
 
-\begin{enumerate}
+\begin{itemize}
 \item generate an opacity table,
 \item run BART to generate spectra,
 \item process the generated spectra into MARGE's desired format,
 \item train, validate, and test an NN model, and
 \item plot specific predicted vs. true spectra.
-\end{enumerate}
+\end{itemize}
 
 \noindent Users can disable some steps via boolean flags within the configuration file.  
 For details, see the following section.
@@ -255,7 +256,7 @@ if generating data via BART, the user must create a BART configuration file
 \noindent The available options for a MARGE configuration file are listed below.
 
 \noindent \underline(Directories)
-\begin{enumerate}
+\begin{itemize}
 \item inputdir   : str.  Directory containing MARGE inputs.
 \item outputdir  : str.  Directory containing MARGE outputs.
 \item plotdir    : str.  Directory to save plots. 
@@ -264,10 +265,10 @@ if generating data via BART, the user must create a BART configuration file
                          If relative path, subdirectory within `outputdir`.
 \item preddir    : str.  Directory to store validation and test set predictions and true values. 
                          If relative path, subdirectory within `outputdir`.
-\end{enumerate}
+\end{itemize}
 
 \noindent \underline{Datagen Parameters}
-\begin{enumerate}
+\begin{itemize}
 \item datagen    : bool. Determines whether to generate data.
 \item code       : str.  Determines the code to use for data generation.
 \item cfile      : str.  Name of the `code` configuration file for data generation.
@@ -277,11 +278,11 @@ if generating data via BART, the user must create a BART configuration file
                    completing data processing.
                    Note: if True, it will PERMANENTLY DELETE the original, 
                          unprocessed data!
-\end{enumerate}
+\end{itemize}
 
 
 \noindent \underline{Neural Network (NN) Parameters}
-\begin{enumerate}
+\begin{itemize}
 \item trainmodel : bool. Determines whether to use an NN model.
 \item resume     : bool. Determines whether to resume training a previously-trained 
                    model.
@@ -290,7 +291,7 @@ if generating data via BART, the user must create a BART configuration file
 \item validflag  : bool. Determines whether to validate an NN model.
 \item testflag   : bool. Determines whether to test     an NN model.
 
-\item TFR_file   : str.  Prefix for the TFRecords files to be created.
+\item TFR\_file   : str.  Prefix for the TFRecords files to be created.
 \item buffer     : int.  Number of batches to pre-load into memory.
 \item ncores     : int.  Number of CPU cores to use to load the data in parallel.
 
@@ -300,10 +301,10 @@ if generating data via BART, the user must create a BART configuration file
 \item scalelims  : floats. The min, max of the range of the scaled data.
                      It is recommended to use -1, 1
 
-\item weight_file: str.  File containing NN model weights.
+\item weight\_file: str.  File containing NN model weights.
                    NOTE: MUST end in .h5
-\item input_dim  : int.  Dimensionality of the input  to the NN.
-\item output_dim : int.  Dimensionality of the output of the NN.
+\item input\_dim  : int.  Dimensionality of the input  to the NN.
+\item output\_dim : int.  Dimensionality of the output of the NN.
 \item ilog       : bool. Determines whether to take the log10 of the input  data.
 \item olog       : bool. Determines whether to take the log10 of the output data.
 
@@ -312,50 +313,50 @@ if generating data via BART, the user must create a BART configuration file
 \item epochs     : int.  Maximum number of iterations through the training data set.
 \item patience   : int.  Early-stopping criteria; stops training after `patience` 
                    epochs of no improvement in validation loss.
-\item batch_size : int.  Mini-batch size for training/validation steps.
+\item batch\_size : int.  Mini-batch size for training/validation steps.
 
 \item lengthscale: float. Minimum learning rate.
-\item max_lr     : float. Maximum learning rate.
-\item clr_mode   : str.   Specifies the function to use for a cyclical learning rate 
+\item max\_lr     : float. Maximum learning rate.
+\item clr\_mode   : str.   Specifies the function to use for a cyclical learning rate 
                     (CLR).
                     'triangular' linearly increases from `lengthscale` to 
-                    `max_lr` over `clr_steps` iterations, then decreases.
+                    `max\_lr` over `clr\_steps` iterations, then decreases.
                     'triangular2' performs similar to `triangular', except that 
-                    the `max_lr` value is decreased by 2 every complete cycle,
-                    i.e., 2 * `clr_steps`.
-                    'exp_range' performs similar to 'triangular2', except that 
+                    the `max\_lr` value is decreased by 2 every complete cycle,
+                    i.e., 2 * `clr\_steps`.
+                    'exp\_range' performs similar to 'triangular2', except that 
                     the amplitude decreases according to an exponential based 
                     on the epoch number, rather than the CLR cycle.
-\item clr_steps  : int.   Number of steps through a half-cycle of the learning rate.
-                    E.g., if using clr_mode = 'triangular' and clr_steps = 4, 
+\item clr\_steps  : int.   Number of steps through a half-cycle of the learning rate.
+                    E.g., if using clr\_mode = 'triangular' and clr\_steps = 4, 
                     Every 8 epochs will have the same learning rate.
                     It is recommended to use an even value.
                     For more details, see Smith (2015), Cyclical Learning Rates 
                     for Training Neural Networks.
-\end{enumerate}
+\end{itemize}
 
 \noindent \underline{Plotting Parameters}
-\begin{enumerate}
-\item xval_label : str.  X-axis label for plots.
-\item yval_label : str.  Y-axis label for plots.
-\item plot_cases : ints. Specifies which cases in the test set should be 
+\begin{itemize}
+\item xval\_label : str.  X-axis label for plots.
+\item yval\_label : str.  Y-axis label for plots.
+\item plot\_cases : ints. Specifies which cases in the test set should be 
                    plotted vs. the true spectrum.
                    Note: must be separated by spaces or indented new lines.
-\end{enumerate}
+\end{itemize}
 
 \noindent \underline{Statistics Files}
-\begin{enumerate}
+\begin{itemize}
 \item fmean      : str.  Name of the file containing the mean of each input/output.
 \item fstdev     : str.  Name of the file containing the standard deviation of each 
                    input/output.
 \item fmin       : str.  Name of the file containing the minimum of each input/output.
 \item fmax       : str.  Name of the file containing the maximum of each input/output.
-\item rmse_file  : str.  Prefix for the file to be saved containing the root mean 
-                   squared error of predictions on the validation & test data.
-\item r2_file    : str.  Prefix for the file to be saved containing the coefficient of
-                   determination (R^2, R-squared) of predictions on the 
-                   validation & test data.
-\end{enumerate}
+\item rmse\_file  : str.  Prefix for the file to be saved containing the root mean 
+                   squared error of predictions on the validation \& test data.
+\item r2\_file    : str.  Prefix for the file to be saved containing the coefficient of
+                   determination (R\^2, R-squared) of predictions on the 
+                   validation \& test data.
+\end{itemize}
 
 
 
@@ -365,11 +366,11 @@ if generating data via BART, the user must create a BART configuration file
 The BART User Manual details the creation of a BART configuration file.  For 
 compatibility with MARGE, users must ensure two specific arguments are set 
 within the configuration file:
-\begin{enumerate}
+\begin{itemize}
 \item savemodel: base file name of the generated data. MUST have '.npy' file 
                  extension.
 \item modelper: an integer that sets the batch size of each `savemodel` file.
-\end{enumerate}
+\end{itemize}
 
 \noindent Note that `modelper` batch size corresponds to the iterations per 
 chain.  For example, if using 10 parallel chains, a `modelper` of 512 would 
@@ -385,7 +386,7 @@ be created.  For details on generating a TLI file, see the Transit User Manual.
 
 MARGE produces the following outputs if all modes are executed:
 
-\begin{enumerate}
+\begin{itemize}
 \item simulated spectra.npy files
 \item processed spectra.npy files
 \item mean.npy -- contains the mean of training set inputs and outputs
@@ -399,7 +400,7 @@ MARGE produces the following outputs if all modes are executed:
 \item file containing the NN weights
 \item Pickled file of the cyclical learning rate callback
 \item Pickled file of the signal termination callback
-\end{enumerate}
+\end{itemize}
 
 \noindent Note that BART's output files are not discussed here; see the BART 
 User Manual for details.
@@ -411,9 +412,9 @@ User Manual for details.
 Please cite this paper if you found this package useful for your
 research:
 
-\begin{enumerate}
+\begin{itemize}
 \item Himes et al. (2020), submitted to PSJ.
-\end{enumerate}
+\end{itemize}
 
 \begin{verbatim}
 @article{HimesEtal2020psjMARGEHOMER,
