@@ -73,9 +73,13 @@ Monte Carlo (MC3) code, with a random uniform sampler to propose models within a
 defined parameter space.  Due to the possible data size, MARGE also modifies MC3
 to save out the evaluated models in batches.
 
-\noindent The detailed MARGE code documentation and User Manual are provided with the 
-package to assist users in its usage. For additional support, contact the lead 
-author (see Section \ref{sec:team}).
+\noindent The detailed MARGE code documentation and User Manual are provided 
+with the package to assist users in its usage. For additional support, contact 
+the lead author (see Section \ref{sec:team}).
+
+\noindent MARGE is released under the Reproducible Research Software License.  
+For details, see 
+\url{https://planets.ucf.edu/resources/reproducible-research/software-license/}.
 
 \noindent The MARGE package is organized as follows: \newline
 % The framebox and minipage are necessary because dirtree kills the
@@ -149,7 +153,7 @@ cd `localMARGEdir`
 
 \noindent Now, clone the repository:
 \begin{verbatim}
-git clone --recursive https://github.com/exosports/BART BART/
+git clone --recursive https://github.com/exosports/MARGE .
 \end{verbatim}
 
 \noindent For data generation with BART, users must copy modifications to files
@@ -191,7 +195,7 @@ the MARGE directory `localMARGEdir`,
 
 \begin{verbatim}
 mkdir ../run
-cp -a ../example/* ../run/.
+cp -a ./example/* ../run/.
 cd ../run
 \end{verbatim}
 
@@ -408,8 +412,21 @@ Please cite this paper if you found this package useful for your
 research:
 
 \begin{enumerate}
-\item Himes et al. (2020), submitted to ApJ.
+\item Himes et al. (2020), submitted to PSJ.
 \end{enumerate}
+
+\begin{verbatim}
+@article{HimesEtal2020psjMARGEHOMER,
+   author = {{Himes}, Michael D. and {Harrington}, Joseph and {Cobb}, Adam D. and {G{\"u}ne{\textcommabelow s} Baydin}, At{\i}l{\i}m and {Soboczenski}, Frank and
+         {O'Beirne}, Molly D. and {Zorzan}, Simone and
+         {Wright}, David C. and {Scheffer}, Zacchaeus and
+         {Domagal-Goldman}, Shawn D. and {Arney}, Giada N.},
+    title = "Accurate Machine Learning Atmospheric Retrieval via a Neural Network Surrogate Model for Radiative Transfer",
+  journal = {PSJ},
+     year = 2020,
+    pages = {submitted to PSJ}
+}
+\end{verbatim}
 
 \noindent Thanks!
 
