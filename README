@@ -29,6 +29,10 @@ MARGE is an all-in-one package to generate exoplanet spectra across a
 defined parameter space, process the output, and train machine learning (ML) 
 models as a fast approximation to radiative transfer (RT).
 
+MARGE comes with complete documentation as well as a user manual to assist 
+in its usage.  Users can find the MARGE User Manual at 
+http://planets.ucf.edu/bart-docs/MARGE_user_manual.pdf.
+
 MARGE is an open-source project that welcomes improvements from the community 
 to be submitted via pull requests on Github.  To be accepted, such improvements 
 must be generally consistent with the existing coding style, and all changes 
