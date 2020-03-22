@@ -224,9 +224,8 @@ def main(comm):
   # Planet-to-star radius ratio:
   rprs  = rplanet / rstar
 
-  nfilters = len(ffile)  # Number of filters:
-
   if walk != 'unif':
+    nfilters = len(ffile)  # Number of filters:
     # FINDME: Separate filter/stellar interpolation?
     # Get stellar model:
     starfl, starwn, tmodel, gmodel = w.readkurucz(kurucz, tstar, gstar)

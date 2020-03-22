@@ -154,6 +154,15 @@ def makeMCMC(cfile, MCMC_cfile, logfile):
   # Add func:
   Bconfig.set(section, "func", "hack BARTfunc {:s}".format(filedir))
 
+  # Add 'data' -- not used by the MCMC for our case, but required due to design
+  wnhigh = float(Bconfig.get(section, "wnhigh"))
+  wnlow  = float(Bconfig.get(section, "wnlow"))
+  wndelt = float(Bconfig.get(section, "wndelt"))
+  ndata  = int(np.floor((wnhigh - wnlow) / wndelt + 1))
+  Bconfig.set(section, "data",   "0 " * ndata)
+  Bconfig.set(section, "uncert", "1 " * ndata)
+
+
   # Params is a special case:
   params = Bconfig.get(section, "params")
   # It may or not be a file path:

@@ -1,0 +1,99 @@
+Introduction
+============
+
+This directory holds an example of how to run MARGE, using BART for data 
+generation. It matches the use case demonstrated in Himes et al. (2020).
+
+********************************** IMPORTANT **********************************
+Executing this in its entirety will take significant compute time and resources
+
+Recommended: Linux
+             >= 8 cores
+             >= 12 GB RAM
+             GPU with >= 12 GB RAM
+             >= 500 GB free space
+
+Less than the recommended specs is possible, but it will take significantly 
+more time and will require the user to modify some of the input files.
+
+If using an operating system that is not Linux-based, some aspects of the 
+example will likely need to be adjusted.  Users are encouraged to submit 
+updates to this example guide via pull requests if they find modifications are 
+necessary for certain operating systems.
+*******************************************************************************
+
+This example is provided to show users the general workflow of the software.
+While we could reduce the compute time/resources required by reducing the 
+number of forward models generated or the number of epochs trained, we want 
+to ensure that a complete example is provided to users.  As such, we 
+*** DO NOT **** recommend that users run this example in its entirety, unless 
+they really, REALLY want to.  Adapt the example to your desired use case.
+
+
+Walkthrough
+===========
+
+This section will walk the user through executing the example.
+
+Ensure that the repo's submodules have also been cloned.  
+When cloning MARGE, this can be done by
+  git clone --recursive https://github.com/exosports/MARGE MARGE/
+  cd MARGE/
+Alternatively, if MARGE has already been cloned, pull the submodules by 
+navigating to the MARGE directory and 
+  git submodule init
+  git submodule update
+
+Next, build BART:
+  make bart
+
+Now, we are ready to begin.
+Navigate to the directory where the example files are at.
+  cd example
+If the user has copied these files to another location outside of MARGE, 
+navigate there instead.  The paths in some input files will need to be changed 
+by the user. 
+
+First, download the line lists:
+  cd par
+  ./get_line_lists.sh
+  cd ..
+
+Next, create the TLI file for BART:
+  ../modules/BART/modules/transit/pylineread/src/pylineread.py -c pyline.cfg
+
+Finally, execute MARGE:
+  ../MARGE.py example.cfg
+
+It will build the opacity table, generate the data, process it, and then 
+train a convolutional neural network model.  This will take a long time.
+
+
+Description of files
+====================
+
+BART.cfg -- BART configuration file.  See the BART User Manual for details.
+
+CIA_HITRAN_H2He_0200-9900K_0.5-500um.dat -- H2-He collision-induced absorption
+                                            file.
+
+example.cfg -- MARGE configuration file.  See the supplied user manual or 
+               readme for details.
+
+hd189733b-fp00k2odfnew.pck -- Kurucz stellar model file.
+
+HD189733b.tep -- Transiting ExoPlanet (TEP) file.  Contains information about 
+                 a given extrasolar system.
+
+par/                  -- directory that holds .txt files of URLs where 
+                         HITRAN/HITEMP line lists can be downloaded.  
+                         Line lists will be downloaded here.
+    get_line_lists.sh -- Downloads and extracts the line lists when executed.
+
+pyline.cfg -- Pylineread configuration file to build the TLI file for BART's 
+              execution.  See the BART User Manual for details.
+
+xvals.npy -- Contains the wavenumber values associated with each spectrum to 
+             be generated.
+
+

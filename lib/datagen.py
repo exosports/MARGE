@@ -48,7 +48,9 @@ def process_data(code, cfile, data_dir, preserve=True):
                 # Output directory
                 loc_dir = os.path.join(conf['loc_dir'], '')
                 if not os.path.isabs(loc_dir):
-                    loc_dir = os.path.dirname(__file__) + '/../' + loc_dir
+                    loc_dir = os.path.join(
+                                os.path.abspath(cfile).rsplit('/', 1)[0], 
+                                loc_dir)
                 fparams = loc_dir + 'output.npy'
                 # Saved models
                 savemodel = conf['savemodel']

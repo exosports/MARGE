@@ -145,8 +145,8 @@ data generation.  MARGE was developed using MPICH version 3.3.2.
 
 \noindent To begin, obtain the latest stable version of MARGE.  
 
-\noindent First, create a local directory to hold MARGE.  Let the path to this directory 
-be `localMARGEdir`.
+\noindent First, create a local directory to hold MARGE.  Let the path to this 
+directory be \texttt{`}localMARGEdir\texttt{`}.
 
 \begin{verbatim}
 mkdir `localMARGEdir`
@@ -184,58 +184,96 @@ conda activate marge
 \section{Example}
 \label{sec:example}
 
-\noindent The following script will walk a user through executing all modes of MARGE 
-to simulate the emission spectra of HD 189733 b with a variety of thermal 
-profiles and atmospheric compositions, process the data, and train an NN 
-model to quickly approximate spectra.  These instructions are meant to be 
-executed from a Linux terminal.  Note that the complete execution of all steps 
-requires significant compute resources, especially if lacking a graphics 
-processing unit (GPU).
+This section describes example of how to run MARGE, using BART for data 
+generation. It matches the use case demonstrated in Himes et al. (2020).
 
-\noindent To begin, copy the requisite files to a directory parallel to MARGE.  From 
-the MARGE directory `localMARGEdir`,
+\noindent \textbf{NOTE}: Executing this in its entirety without modification 
+will take significant compute time and resources.
 
-\begin{verbatim}
-mkdir ../run
-cp -a ./example/* ../run/.
-cd ../run
-\end{verbatim}
-
-\noindent To generate data with BART, a Transit Line-Information (TLI) file containing 
-all line list information must be created.  Download the required line lists 
-and create the TLI file:
-
-\begin{verbatim}
-./get_lists.sh
-make TLI cfile=pylineread.cfg
-\end{verbatim}
-
-\noindent Now, execute MARGE:
-
-\begin{verbatim}
-../`localMARGEdir`/MARGE.py example.cfg
-\end{verbatim}
-
-\noindent This will take a long time to run.  It will 
-
+\noindent The recommended system specs are
 \begin{itemize}
+\item Linux
+\item {\textgreater}= 8 cores
+\item {\textgreater}= 12 GB RAM
+\item GPU with {\textgreater}= 12 GB RAM
+\item {\textgreater}= 500 GB free space
+\end{itemize}
+
+\noindent Less than the recommended specs is possible, but it will take 
+significantly more time and will require the user to modify some of the 
+input files.
+
+\noindent If using an operating system that is not Linux-based, some aspects 
+of the example will likely need to be adjusted.  Users are encouraged to submit 
+updates to this example guide via pull requests if they find modifications are 
+necessary for certain operating systems.
+
+\noindent This example is provided to show users the general workflow of the 
+software.  While we could reduce the compute time/resources required by 
+reducing the number of forward models generated or the number of epochs 
+trained, we want to ensure that a complete example is provided to users.  
+Generally, we *** \textbf{DO NOT} **** recommend that users run this example in 
+its entirety, unless they really, REALLY want to.  Adapt the example to your 
+desired use case.
+
+
+\subsection{Walkthrough}
+
+Ensure that the repo's submodules have also been cloned.  
+When cloning MARGE, this can be done by
+\begin{verbatim}
+git clone --recursive https://github.com/exosports/MARGE MARGE/
+cd MARGE/
+\end{verbatim}
+Alternatively, if MARGE has already been cloned, pull the submodules by 
+navigating to the MARGE directory and 
+\begin{verbatim}
+git submodule init
+git submodule update
+\end{verbatim}
+
+\noindent Next, build BART:
+\begin{verbatim}
+make bart
+\end{verbatim}
+
+\noindent Now, we are ready to begin.
+Navigate to the directory where the example files are at.
+\begin{verbatim}
+cd example
+\end{verbatim}
+If the user has copied these files to another location outside of MARGE, 
+navigate there instead.  The paths in some input files will need to be changed 
+by the user. \newline
+
+\noindent First, download the line lists:
+\begin{verbatim}
+cd par
+./get_line_lists.sh
+cd ..
+\end{verbatim}
+
+\noindent Next, create the TLI file for BART:
+\begin{verbatim}
+../modules/BART/modules/transit/pylineread/src/pylineread.py -c pyline.cfg
+\end{verbatim}
+
+\noindent Finally, execute MARGE:
+\begin{verbatim}
+../MARGE.py example.cfg
+\end{verbatim}
+
+\noindent This last step will take a long time to run.  It will 
+\begin{enumerate}
 \item generate an opacity table,
 \item run BART to generate spectra,
 \item process the generated spectra into MARGE's desired format,
 \item train, validate, and test an NN model, and
-\item plot specific predicted vs. true spectra.
-\end{itemize}
+\item plot the specified predicted vs. true spectra.
+\end{enumerate}
 
-\noindent Users can disable some steps via boolean flags within the configuration file.  
-For details, see the following section.
-
-
-
-
-
-
-
-
+\noindent To break these steps up, users can disable some steps via boolean 
+flags within the configuration file.  For details, see the following section.
 
 
 \section{Program Inputs}
@@ -252,41 +290,47 @@ The MARGE configuration file is the main file that sets the arguments for a
 MARGE run. The arguments follow the format {\ttb argument = value}, where 
 {\ttb argument} is any of the possible arguments described below. Note that, 
 if generating data via BART, the user must create a BART configuration file 
-(see Section \ref{sec:BARTconfig}).
+(see Section \ref{sec:BARTconfig} and the BART User Manual).\newline
 
 \noindent The available options for a MARGE configuration file are listed below.
+\newline
 
-\noindent \underline(Directories)
+\noindent \underline{Directories}
 \begin{itemize}
 \item inputdir   : str.  Directory containing MARGE inputs.
 \item outputdir  : str.  Directory containing MARGE outputs.
 \item plotdir    : str.  Directory to save plots. 
-                         If relative path, subdirectory within `outputdir`.
+                         If relative path, subdirectory within 
+                         \texttt{`}outputdir\texttt{`}.
 \item datadir    : str.  Directory to store generated data. 
-                         If relative path, subdirectory within `outputdir`.
-\item preddir    : str.  Directory to store validation and test set predictions and true values. 
-                         If relative path, subdirectory within `outputdir`.
+                         If relative path, subdirectory within 
+                         \texttt{`}outputdir\texttt{`}.
+\item preddir    : str.  Directory to store validation and test set predictions 
+                         and true values. 
+                         If relative path, subdirectory within 
+                         \texttt{`}outputdir\texttt{`}.
 \end{itemize}
 
 \noindent \underline{Datagen Parameters}
 \begin{itemize}
 \item datagen    : bool. Determines whether to generate data.
 \item code       : str.  Determines the code to use for data generation.
-\item cfile      : str.  Name of the `code` configuration file for data generation.
-                   Note: MUST be located in `inputdir`!
+\item cfile      : str.  Name of the \texttt{`}code\texttt{`} configuration 
+                         file for data generation.
+                   Note: MUST be located in \texttt{`}inputdir\texttt{`}!
 \item processdat : bool. Determines whether to process the generated data.
-\item preservedat: bool. Determines whether to preserve the unprocessed data after 
-                   completing data processing.
-                   Note: if True, it will PERMANENTLY DELETE the original, 
-                         unprocessed data!
+\item preservedat: bool. Determines whether to preserve the unprocessed data 
+                         after completing data processing.
+                   \textbf{Note}: if True, it will PERMANENTLY DELETE the 
+                          original, unprocessed data!
 \end{itemize}
 
 
 \noindent \underline{Neural Network (NN) Parameters}
 \begin{itemize}
 \item trainmodel : bool. Determines whether to use an NN model.
-\item resume     : bool. Determines whether to resume training a previously-trained 
-                   model.
+\item resume     : bool. Determines whether to resume training a 
+                         previously-trained model.
 \item seed       : int.  Random seed.
 \item trainflag  : bool. Determines whether to train    an NN model.
 \item validflag  : bool. Determines whether to validate an NN model.
@@ -294,41 +338,48 @@ if generating data via BART, the user must create a BART configuration file
 
 \item TFR\_file   : str.  Prefix for the TFRecords files to be created.
 \item buffer     : int.  Number of batches to pre-load into memory.
-\item ncores     : int.  Number of CPU cores to use to load the data in parallel.
+\item ncores     : int.  Number of CPU threads to use to load the data in 
+                         parallel.
 
-\item normalize  : bool. Determines whether to normalize the data by its mean and 
-                   standard deviation.
-\item scale      : bool. Determines whether to scale the data to be within a range.
+\item normalize  : bool. Determines whether to normalize the data by its mean 
+                         and standard deviation.
+\item scale      : bool. Determines if to scale the data to be within a range.
 \item scalelims  : floats. The min, max of the range of the scaled data.
-                     It is recommended to use -1, 1
+                           It is recommended to use -1, 1
 
 \item weight\_file: str.  File containing NN model weights.
                    NOTE: MUST end in .h5
 \item input\_dim  : int.  Dimensionality of the input  to the NN.
 \item output\_dim : int.  Dimensionality of the output of the NN.
-\item ilog       : bool. Determines whether to take the log10 of the input  data.
-\item olog       : bool. Determines whether to take the log10 of the output data.
+\item ilog       : bool. Determines whether to take the log10 of input  data.
+\item olog       : bool. Determines whether to take the log10 of output data.
 
 \item convlayers : ints. Number of nodes for each convolutional layer.
 \item denselayers: ints. Number of nodes for each dense         layer.
-\item epochs     : int.  Maximum number of iterations through the training data set.
-\item patience   : int.  Early-stopping criteria; stops training after `patience` 
-                   epochs of no improvement in validation loss.
+\item epochs     : int.  Maximum number of iterations through the training 
+                         data set.
+\item patience   : int.  Early-stopping criteria; stops training after 
+                         \texttt{`}patience\texttt{`} epochs of no improvement 
+                         in validation loss.
 \item batch\_size : int.  Mini-batch size for training/validation steps.
 
 \item lengthscale: float. Minimum learning rate.
 \item max\_lr     : float. Maximum learning rate.
-\item clr\_mode   : str.   Specifies the function to use for a cyclical learning rate 
-                    (CLR).
-                    'triangular' linearly increases from `lengthscale` to 
-                    `max\_lr` over `clr\_steps` iterations, then decreases.
-                    'triangular2' performs similar to `triangular', except that 
-                    the `max\_lr` value is decreased by 2 every complete cycle,
-                    i.e., 2 * `clr\_steps`.
-                    'exp\_range' performs similar to 'triangular2', except that 
+\item clr\_mode   : str.   Specifies the function to use for a cyclical 
+                    learning rate (CLR).
+                    `triangular' linearly increases from 
+                    \texttt{`}lengthscale\texttt{`} to 
+                    \texttt{`}max\_lr\texttt{`} over 
+                    \texttt{`}clr\_steps\texttt{`} iterations, then decreases.
+                    `triangular2' performs similar to `triangular', except that 
+                    the \texttt{`}max\_lr\texttt{`} value is decreased by 2 
+                    every complete cycle, i.e., 2 * 
+                    \texttt{`}clr\_steps\texttt{`}.
+                    `exp\_range' performs similar to `triangular2', except that 
                     the amplitude decreases according to an exponential based 
                     on the epoch number, rather than the CLR cycle.
-\item clr\_steps  : int.   Number of steps through a half-cycle of the learning rate.
+\item clr\_steps  : int.   Number of steps through a half-cycle of the learning 
+                           rate.
                     E.g., if using clr\_mode = 'triangular' and clr\_steps = 4, 
                     Every 8 epochs will have the same learning rate.
                     It is recommended to use an even value.
@@ -370,15 +421,20 @@ within the configuration file:
 \begin{itemize}
 \item savemodel: base file name of the generated data. MUST have '.npy' file 
                  extension.
-\item modelper: an integer that sets the batch size of each `savemodel` file.
+\item modelper: an integer that sets the batch size of each 
+                \texttt{`}savemodel\texttt{`} file.
 \end{itemize}
 
-\noindent Note that `modelper` batch size corresponds to the iterations per 
-chain.  For example, if using 10 parallel chains, a `modelper` of 512 would 
-save out files in batches of 5120.
+\noindent These options are unique to MARGE.  As an example, if 
+\texttt{`}savemodel\texttt{`} is set to `spectra.npy', then the files will be 
+saved as `spectra0.npy', `spectra1.npy', etc.  The \texttt{`}modelper\texttt{`} 
+batch size corresponds to the iterations per chain.  For example, if using 10 
+parallel chains, a \texttt{`}modelper\texttt{`} of 512 would save out files in 
+batches of 5120.\newline
 
 \noindent  Executing BART requires a Transit Line-Information (TLI) file to 
-be created.  For details on generating a TLI file, see the Transit User Manual.
+be created.  For details on generating a TLI file, see the Transit User Manual, 
+or refer to the example (Section \ref{sec:example}).
 
 
 
