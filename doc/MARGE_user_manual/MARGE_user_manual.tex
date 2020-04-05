@@ -64,15 +64,20 @@ Dr.~Joseph \textsc{Harrington}
 \section{Introduction}
 \label{sec:theory}
 
-\noindent This document describes MARGE, the Machine learning Algorithm for Radiative 
-transfer of Generated Exoplanets.  MARGE generates exoplanet spectra; processes 
-them into a desired format; and trains, validates, and tests neural network (NN)
-models to approximate radiative transfer (RT).  At present, MARGE is configured 
-to use BART, the Bayesian Atmospheric Radiative Transfer code, for spectra 
-generation.  MARGE modifies BART's Bayesian sampler, the Multi-Core Markov Chain
-Monte Carlo (MC3) code, with a random uniform sampler to propose models within a
-defined parameter space.  Due to the possible data size, MARGE also modifies MC3
-to save out the evaluated models in batches.
+\noindent This document describes MARGE, the Machine learning Algorithm for 
+Radiative transfer of Generated Exoplanets.  MARGE generates exoplanet spectra; 
+processes them into a desired format; and trains, validates, and tests neural 
+network (NN) models to approximate radiative transfer (RT).  At present, MARGE 
+is configured to use BART, the Bayesian Atmospheric Radiative Transfer code, 
+for spectra generation.  MARGE modifies BART's Bayesian sampler, the Multi-Core 
+Markov Chain Monte Carlo (MC3) code, with a random uniform sampler to propose 
+models within a defined parameter space.  Due to the possible data size, MARGE 
+also modifies MC3 to save out the evaluated models in batches.  
+
+For the NN models, MARGE uses Keras with a Tensorflow backend.  Early stopping 
+is enabled by default, and model training can be stopped (via Ctrl+C) and 
+resumed in a later execution.  The weights for trained NNs are saved in the 
+common .h5 format as well as the framework-agnostic .onnx format.
 
 The detailed MARGE code documentation and User Manual are provided 
 with the package to assist users in its usage. For additional support, contact 
@@ -201,20 +206,21 @@ will take significant compute time and resources.
 
 \noindent Less than the recommended specs is possible, but it will take 
 significantly more time and will require the user to modify some of the 
-input files.
+input files.\newline
 
 \noindent If using an operating system that is not Linux-based, some aspects 
 of the example will likely need to be adjusted.  Users are encouraged to submit 
 updates to this example guide via pull requests if they find modifications are 
-necessary for certain operating systems.
+necessary for certain operating systems.\newline
 
 \noindent This example is provided to show users the general workflow of the 
 software.  While we could reduce the compute time/resources required by 
 reducing the number of forward models generated or the number of epochs 
-trained, we want to ensure that a complete example is provided to users.  
-Generally, we *** \textbf{DO NOT} **** recommend that users run this example in 
-its entirety, unless they really, REALLY want to.  Adapt the example to your 
-desired use case.
+trained, we want to ensure that a complete example is provided to users 
+with good results.  Due to the compute resources required to run it, we 
+generally recommend that users only run the example without modification 
+if they really, really want to.  We recommend that users adapt the example 
+to their desired use case. 
 
 
 \subsection{Walkthrough}
@@ -454,8 +460,7 @@ MARGE produces the following outputs if all modes are executed:
 \item datsize.npy -- contains the size of the training, validation, and test 
                      sets
 \item TFRecords files of the data set
-\item file containing the NN weights
-\item Pickled file of the cyclical learning rate callback
+\item files containing the NN weights in .h5 and .onnx formats
 \item Pickled file of the signal termination callback
 \end{itemize}
 

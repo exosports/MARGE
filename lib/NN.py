@@ -19,7 +19,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from sklearn import metrics
-from scipy.misc import logsumexp
 
 # Keras
 import keras
@@ -35,6 +34,10 @@ from keras.layers.advanced_activations import LeakyReLU
 from keras import initializers
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
+
+import onnx
+import keras2onnx
+#from   onnx2keras import onnx_to_keras
 
 import GPyOpt
 
@@ -172,16 +175,10 @@ class NNModel:
 
         self.model = Model(inp, out)
 
-        def r2_keras(y_true, y_pred):
-            SS_res =  K.sum(K.square(y_true - y_pred)) 
-            SS_tot = K.sum(K.square(y_true - K.mean(y_true))) 
-            return ( 1 - SS_res/(SS_tot + K.epsilon()) )
-
         # Compile model
         if shuffle:
             self.model.compile(optimizer=adam(lr=self.lengthscale, amsgrad=True), 
                                loss=keras.losses.mean_squared_error, 
-                               metrics=[r2_keras],
                                target_tensors=[self.Y])
         else:
             self.model.compile(optimizer=adam(lr=self.lengthscale, amsgrad=True), 
@@ -215,20 +212,32 @@ class NNModel:
 
         # Resume properly, if requested
         if self.resume:
-            self.model.load_weights(self.weight_file)
-            clrpickle  = glob.glob(savedir + 'clr.epoch*.pickle')[-1]
+            if self.weight_file[-5:] == '.onnx':
+                #onnx_model = onnx.load(self.weight_file)
+                #self.model = onnx_to_keras(onnx_model, ['input_1'], 
+                #                           name_policy='short')
+                #self.model.compile(optimizer=adam(lr=self.lengthscale, 
+                #                                  amsgrad=True), 
+                #                   loss=keras.losses.mean_squared_error, 
+                #                   target_tensors=[self.Y])
+                #self.weight_file = self.weight_file.replace('.onnx', '.h5')
+                print('Resuming training for .onnx models is not yet available.')
+                print('Please specify a .h5 file of model weights.')
+                sys.exit()
+            else:
+                self.model.load_weights(self.weight_file)
             sigpickle  = glob.glob(savedir + 'sig.epoch*.pickle')[-1]
-            clr        = pickle.load(open(clrpickle, "rb"))
             sig        = pickle.load(open(sigpickle, "rb"))
             init_epoch = int(sigpickle.split('.')[-2].strip('epoch'))
         # Train a new model
         else:
-            # Cyclical learning rate
-            clr        = C.CyclicLR(base_lr=self.lengthscale, max_lr=self.max_lr,
-                                    step_size=self.clr_steps, mode=self.clr_mode)
             # Handle Ctrl+C or STOP file to halt training
             sig        = C.SignalStopping(stop_file=self.stop_file)
             init_epoch = 0
+        sig_savefile     = savedir + 'sig.epoch{epoch:04d}.pickle'
+        # Cyclical learning rate
+        clr        = C.CyclicLR(base_lr=self.lengthscale, max_lr=self.max_lr,
+                                step_size=self.clr_steps, mode=self.clr_mode)
 
         # Early stopping criteria
         Early_Stop = keras.callbacks.EarlyStopping(monitor='val_loss', 
@@ -239,19 +248,20 @@ class NNModel:
         Nan_Stop   = keras.callbacks.TerminateOnNaN()
 
         # Super-charged model saving & resuming training
-        clr_savefile     = savedir + 'clr.epoch{epoch:04d}.pickle'
-        sig_savefile     = savedir + 'sig.epoch{epoch:04d}.pickle'
         super_checkpoint = C.ModelCheckpointEnhanced(filepath=self.weight_file, 
                                 monitor='val_loss',
                                 save_best_only=True,
                                 mode='auto',
                                 verbose=1, 
-                                callbacks_to_save =[clr,          sig         ], 
-                                callbacks_filepath=[clr_savefile, sig_savefile])
+                                callbacks_to_save =[sig], 
+                                callbacks_filepath=[sig_savefile])
 
 
-
+        # Train the model
         if self.train_flag:
+            # Ensure at least 1 epoch happens when training
+            if init_epoch >= epochs:
+                epochs = init_epoch + 1
             self.historyNN = self.model.fit(initial_epoch=init_epoch, 
                                              epochs=epochs, 
                                              steps_per_epoch=train_steps, 
@@ -485,6 +495,9 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                  weight_file, stop_file='./STOP', 
                  train_flag=False, shuffle=False, resume=False)
     nn.model.load_weights(weight_file) # Load the model
+    # Save in ONNX format
+    onnx_model = keras2onnx.convert_keras(nn.model)
+    onnx.save_model(onnx_model, nn.weight_file.rsplit('.', 1)[0] + '.onnx')
 
     # Validate model
     if (validflag or trainflag) and clr_steps != "range test":
@@ -532,17 +545,18 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     # Plot requested cases
     predfoo = sorted(glob.glob(preddir+'test/testpred*'))
     truefoo = sorted(glob.glob(preddir+'test/testtrue*'))
-    for val in plot_cases:
-        fname    = plotdir + 'spec' + str(val) + '_pred-vs-true.png'
-        predspec = np.load(predfoo[val // batch_size])[val % batch_size]
-        predspec = U.denormalize(U.descale(predspec, 
-                                           y_min, y_max, scalelims),
-                                 y_mean, y_std)
-        truespec = np.load(truefoo[val // batch_size])[val % batch_size]
-        truespec = U.denormalize(U.descale(truespec, 
-                                           y_min, y_max, scalelims),
-                                 y_mean, y_std)
-        P.plot_spec(fname, predspec, truespec, xvals, xlabel, ylabel, olog)
+    if len(predfoo) > 0 and len(truefoo) > 0:
+        for val in plot_cases:
+            fname    = plotdir + 'spec' + str(val) + '_pred-vs-true.png'
+            predspec = np.load(predfoo[val // batch_size])[val % batch_size]
+            predspec = U.denormalize(U.descale(predspec, 
+                                               y_min, y_max, scalelims),
+                                     y_mean, y_std)
+            truespec = np.load(truefoo[val // batch_size])[val % batch_size]
+            truespec = U.denormalize(U.descale(truespec, 
+                                               y_min, y_max, scalelims),
+                                     y_mean, y_std)
+            P.plot_spec(fname, predspec, truespec, xvals, xlabel, ylabel, olog)
 
     return
 

@@ -1,6 +1,8 @@
 """
 Module that contains functions related to plotting.
 
+resume_save: Handles plot filenames when there are existing plots.
+
 loss: Plots the loss and learning rate history.
 
 pred_vs_true: Plots scatterplot of predicted vs true values.
@@ -22,7 +24,38 @@ import stats as S
 mpl.rcParams['agg.path.chunksize'] = 10000
 
 
-def loss(nn, plotdir, fname='history_train_val_loss'):
+def resume_save(fname):
+    """
+    Handles setting file name in case training is resumed.
+
+    Inputs
+    ------
+    fname: Base save name
+
+    Outputs
+    -------
+    Plot file of `fname` or an incremented version of it
+        Example: fname = 'path/to/someplot.png'
+                 1st call to resume_save(): saves path/to/someplot.png
+                 2nd call to resume_save(): saves path/to/someplot_res1.png
+                 3rd call to resume_save(): saves path/to/someplot_res2.png
+    """
+    if not os.path.exists(fname):
+        plt.savefig(fname, bbox_inches='tight')
+    else:
+        res    = 1
+        fsplit = fname.rsplit('.', 1)
+        resfoo = fsplit[0] + '_res1'
+        if len(fsplit) == 2:
+            # Add file extension
+            resfoo = resfoo + '.' + fsplit[1]
+        while os.path.exists(resfoo):
+            resfoo = resfoo.replace('_res'+str(res), '_res'+str(res+1))
+            res   += 1
+        plt.savefig(resfoo, bbox_inches='tight')
+
+
+def loss(nn, plotdir, fname='history_train_val_loss.png'):
     """
     Plots the loss.
 
@@ -32,7 +65,6 @@ def loss(nn, plotdir, fname='history_train_val_loss'):
     nn   : object. NN to plot the loss for.
     fname: string. Path/to/file for the plot to be saved.
                    Extension must be .png or .pdf.
-                   No extension defaults to .png.
 
     Outputs
     -------
@@ -50,9 +82,9 @@ def loss(nn, plotdir, fname='history_train_val_loss'):
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig(plotdir+fname, bbox_inches='tight')
+    resume_save(plotdir+fname)
     plt.ylim(min_loss, min_loss+np.abs(min_loss*0.5))
-    plt.savefig(plotdir+fname+'_zoom', bbox_inches='tight')
+    resume_save(plotdir+fname.replace('loss', 'loss_zoom'))
     plt.close()
 
     clr_lr   = nn.historyCLR['lr']
@@ -65,12 +97,14 @@ def loss(nn, plotdir, fname='history_train_val_loss'):
         plt.semilogx(clr_lr, clr_loss)
     plt.xlabel("Learning rate")
     plt.ylabel("Loss")
-    plt.savefig(plotdir+fname.replace('train_val_loss', 'clr_loss'), 
-                bbox_inches='tight')
+    resume_save(plotdir+fname.replace('train_val_loss', 'clr_loss'))
+    #plt.savefig(plotdir+fname.replace('train_val_loss', 'clr_loss'), 
+    #            bbox_inches='tight')
     plt.ylim(np.nanmin(val_loss), 
              np.nanmin(val_loss)+np.abs(np.nanmin(val_loss)*0.5))
-    plt.savefig(plotdir+fname.replace('train_val_loss', 'clr_loss_zoom'), 
-                bbox_inches='tight')
+    resume_save(plotdir+fname.replace('train_val_loss', 'clr_loss_zoom'))
+    #plt.savefig(plotdir+fname.replace('train_val_loss', 'clr_loss_zoom'), 
+    #            bbox_inches='tight')
     plt.close()
 
 
