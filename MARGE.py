@@ -52,6 +52,7 @@ def MARGE(confile):
             processdat  = conf.getboolean("processdat")
             preservedat = conf.getboolean("preservedat")
             NNmodel     = conf.getboolean("NNmodel")
+            gridsearch  = conf.getboolean("gridsearch")
             trainflag   = conf.getboolean("trainflag")
             validflag   = conf.getboolean("validflag")
             testflag    = conf.getboolean("testflag")
@@ -121,6 +122,9 @@ def MARGE(confile):
             else:
                 prelayers = None
             layers        =  [int(num) for num in conf["layers"].split()]
+            if gridsearch:
+                architectures = [[int(num) for num  in arch.split()]
+                                 for arch in conf["architectures"].split('\n')]
             ilog          = conf.getboolean("ilog")
             olog          = conf.getboolean("olog")
 
@@ -155,6 +159,7 @@ def MARGE(confile):
                           fsize, rmse_file, r2_file, 
                           inD, outD, ilog, olog, 
                           TFRfile, batch_size, ncores, buffer_size, 
+                          gridsearch, architectures, 
                           prelayers, layers, 
                           lengthscale, max_lr, clr_mode, clr_steps, 
                           epochs, patience, weight_file, resume, 

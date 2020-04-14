@@ -200,12 +200,12 @@ class NNModel:
                      ends training.
         """
         # ModelCheckpoint replaced with ModelCheckpointEnhanced, below
-        #model_checkpoint = keras.callbacks.ModelCheckpoint(self.weight_file,
-        #                                monitor='val_loss',
-        #                                save_best_only=True,
-        #                                save_weights_only=True,
-        #                                mode='auto',
-        #                                verbose=1)
+        model_checkpoint = keras.callbacks.ModelCheckpoint(self.weight_file,
+                                        monitor='val_loss',
+                                        save_best_only=True,
+                                        save_weights_only=True,
+                                        mode='auto',
+                                        verbose=1)
 
         # Directory containing the save files
         savedir = '/'.join(self.weight_file.split('/')[:-1]) + '/'
@@ -245,16 +245,16 @@ class NNModel:
                                                    patience=patience, 
                                                    verbose=1, mode='auto')
         # Stop if NaN loss occurs
-        Nan_Stop   = keras.callbacks.TerminateOnNaN()
+        Nan_Stop = keras.callbacks.TerminateOnNaN()
 
         # Super-charged model saving & resuming training
-        super_checkpoint = C.ModelCheckpointEnhanced(filepath=self.weight_file, 
-                                monitor='val_loss',
-                                save_best_only=True,
-                                mode='auto',
-                                verbose=1, 
-                                callbacks_to_save =[sig], 
-                                callbacks_filepath=[sig_savefile])
+        #super_checkpoint = C.ModelCheckpointEnhanced(filepath=self.weight_file, 
+        #                        monitor='val_loss',
+        #                        save_best_only=True,
+        #                        mode='auto',
+        #                        verbose=1, 
+        #                        callbacks_to_save =[sig], 
+        #                        callbacks_filepath=[sig_savefile])
 
 
         # Train the model
@@ -272,8 +272,20 @@ class NNModel:
                                              validation_steps=valid_steps, 
                                              callbacks=[clr, sig, Early_Stop, 
                                                         Nan_Stop, 
-                                                        super_checkpoint])
+                                                        model_checkpoint])
             self.historyCLR = clr.history
+            fhistory = savedir + 'history.npz'
+            if not os.path.exists(fhistory) or not self.resume:
+                np.savez(fhistory, loss=self.historyNN.history['loss'], 
+                               val_loss=self.historyNN.history['val_loss'])
+            else:
+                history  = np.load(fhistory)
+                loss     = np.concatenate((history['loss'], 
+                            self.historyNN.history['loss']))
+                val_loss = np.concatenate((history['val_loss'], 
+                            self.historyNN.history['val_loss']))
+                np.savez(fhistory, loss=loss, val_loss=val_loss)
+
 
         self.model.load_weights(self.weight_file)
 
@@ -285,6 +297,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
            fsize, rmse_file, r2_file, 
            inD, outD, ilog, olog, 
            TFRfile, batch_size, ncores, buffer_size, 
+           gridsearch, architectures, 
            convlayers, denselayers, 
            lengthscale, max_lr, clr_mode, clr_steps, 
            epochs, patience, 
@@ -320,6 +333,9 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     batch_size : int.    Size of batches for training/validating/testing.
     ncores     : int.    Number of cores to use to load data cases.
     buffer_size: int.    Number of data cases to pre-load in memory.
+    gridsearch : bool.   Determines whether to perform a grid search over 
+                         `architectures`.
+    architectures: list. Model architectures to consider.
     convlayers : list, ints. Dimensionality of conv  layers.
     denselayers: list, ints. Dimensionality of dense layers.
     lengthscale: float.  Minimum learning rat.e
@@ -367,8 +383,10 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     # Update `clr_steps`
     if clr_steps == "range test":
         clr_steps = train_batches * epochs
+        rng_test  = True
     else:
         clr_steps = train_batches * int(clr_steps)
+        rng_test  = False
 
     # Get mean/stdev for normalizing
     if normalize:
@@ -377,8 +395,8 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             mean   = np.load(inputdir + fmean)
             stdev  = np.load(inputdir + fstdev)
         except:
-            print("Calculating the mean and standard deviation ")
-            print("of the data using Welford's method")
+            print("Calculating the mean and standard deviation of the data " +\
+                  "using Welford's method.")
             # Compute stats
             ftrain = glob.glob(datadir + 'train/' + '*.npy')
             mean, stdev, datmin, datmax = S.mean_stdev(ftrain, inD, ilog, olog)
@@ -468,6 +486,50 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
         ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
 
+    if gridsearch:
+        # Train a model for each architecture, w/ unique directories
+        print("\nPerforming a grid search.\n")
+        archrep = []
+        maxlen  = np.inf
+        for arch in architectures:
+            archstr = '-'.join([str(num) for num in arch])
+            archrep.append(archstr)
+            if len(archstr) < maxlen:
+                maxlen = len(archstr)
+            archdir = os.path.join(outputdir, archstr, '')
+            wsplit  = weight_file.rsplit('/', 1)[1].rsplit('.', 1)
+            wfile   = archdir + wsplit[0] + '_' + archstr + '.' + wsplit[1]
+            U.make_dir(archdir)
+            nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
+                         inD, outD, 
+                         x_mean, x_std, y_mean, y_std, 
+                         x_min,  x_max, y_min,  y_max, scalelims, 
+                         ncores, batch_size, buffer_size, 
+                         None, arch, 
+                         lengthscale, max_lr, clr_mode, clr_steps, 
+                         wfile, stop_file='./STOP', 
+                         train_flag=True, shuffle=True)
+            nn.train(train_batches, valid_batches, epochs, patience)
+            P.loss(nn, archdir)
+        # Print/save out the minmium validation loss for each architecture
+        minvl = np.ones(len(architectures)) * np.inf
+        print('Grid search summary')
+        print('-------------------')
+        for i, arch in enumerate(architectures):
+            archstr  = archrep[i]
+            archdir  = os.path.join(outputdir, archstr, '')
+            history  = np.load(archdir+'history.npz')
+            minvl[i] = np.amin(history['val_loss'])
+            print(archstr.ljust(maxlen, ' ') + ': ' + str(minvl[i]))
+            if i == 0:
+                mode = 'w'
+            else:
+                mode = 'a'
+            with open(outputdir + 'gridsearch.txt', mode) as foo:
+                foo.write(archstr.ljust(maxlen, ' ') + ': ' \
+                          + str(minvl[i]) + '\n')
+        return
+
     # Train a model
     if trainflag:
         print('\nBeginning model training.\n')
@@ -500,7 +562,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     onnx.save_model(onnx_model, nn.weight_file.rsplit('.', 1)[0] + '.onnx')
 
     # Validate model
-    if (validflag or trainflag) and clr_steps != "range test":
+    if (validflag or trainflag) and not rng_test:
         print('\nValidating the model...\n')
         rmse_val  = S.rmse(nn, batch_size, valid_batches, outD,
                            y_mean, y_std, y_min, y_max, scalelims, 
@@ -521,7 +583,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                  r2=r2_val, r2_mean=r2_mean)
 
     # Evaluate model on test set
-    if testflag and clr_steps != "range test":
+    if testflag and not rng_test:
         print('\nTesting the model...\n')
         rmse_test  = S.rmse(nn, batch_size, test_batches, outD,
                             y_mean, y_std, y_min, y_max, scalelims, 

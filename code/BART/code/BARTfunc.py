@@ -141,24 +141,37 @@ def main(comm):
             'madhu_noinv' : pt.PT_NoInversion,
             'madhu_inv'   : pt.PT_Inversion}
 
+  # Number of fitting parameters:
+  nfree   = len(params)                 # Total number of free parameters
+  nmolfit = len(molfit)                 # Number of molecular free parameters
+  if walk != 'unif':
+    nradfit  = int(solution == 'transit')  # 1 for transit, 0 for eclipse
+    nmassfit = 0 # Mass comes from TEP file
+    nsmafit  = 0 # Semi-major axis comes from TEP file
+  else:
+    nradfit  = 1 # Radius is free parameter
+    nmassfit = 1 # Mass   is free parameter
+    nsmafit  = 1 # SMA    is free parameter
+
+  # Number of PT free parameters
+  nPT = nfree - nmolfit - nradfit - nmassfit - nsmafit
+
   # Extract necessary values from the TEP file:
-  tep = rd.File(tepfile)
+  tep   = rd.File(tepfile)
   # Stellar temperature in K:
   tstar = float(tep.getvalue('Ts')[0])
   # Stellar radius (in meters):
   rstar = float(tep.getvalue('Rs')[0]) * c.Rsun
-  # Semi-major axis (in meters):
-  sma   = float(tep.getvalue( 'a')[0]) * sc.au
-  # Planetary radius (in meters):
-  rplanet = float(tep.getvalue('Rp')[0]) * c.Rjup
-  # Planetary mass (in kg):
-  mplanet = float(tep.getvalue('Mp')[0]) * c.Mjup
-
-  # Number of fitting parameters:
-  nfree   = len(params)                 # Total number of free parameters
-  nmolfit = len(molfit)                 # Number of molecular free parameters
-  nradfit = int(solution == 'transit')  # 1 for transit, 0 for eclipse
-  nPT     = nfree - nmolfit - nradfit   # Number of PT free parameters
+  
+  # Semi-major axis (in meters), Planetary radius (in meters), mass (in kg):
+  if walk != 'unif':
+    rplanet = float(tep.getvalue('Rp')[0]) * c.Rjup
+    mplanet = float(tep.getvalue('Mp')[0]) * c.Mjup
+    sma     = float(tep.getvalue( 'a')[0]) * sc.au
+  else:
+    rplanet = params[nPT]   * c.Rjup
+    mplanet = params[nPT+1] * c.Mjup
+    sma     = params[nPT+2] * sc.au  
 
   # Read atmospheric file to get data arrays:
   species, pressure, temp, abundances = mat.readatm(atmfile)
@@ -192,7 +205,7 @@ def main(comm):
     PTargs  = None
 
   # Allocate arrays for receiving and sending data to master:
-  freepars = np.zeros(nfree,                 dtype='d')
+  freepars = np.zeros( nfree,                dtype='d')
   profiles = np.zeros((nspecies+1, nlayers), dtype='d')
   # This are sub-sections of profiles, containing just the temperature and
   # the abundance profiles, respectively:
@@ -283,7 +296,7 @@ def main(comm):
     # If the temperature goes out of bounds:
     if np.any(tprofile < Tmin) or np.any(tprofile > Tmax):
       if walk == 'unif':
-        mu.comm_gather(comm, -np.ones(nwave), MPI.DOUBLE)
+        mu.comm_gather(comm, -np.ones(nwave),    MPI.DOUBLE)
       else:
         mu.comm_gather(comm, -np.ones(nfilters), MPI.DOUBLE)
       continue
@@ -291,13 +304,14 @@ def main(comm):
     for i in np.arange(nmolfit):
       m = imol[i]
       # Use variable as the log10:
-      aprofiles[m] = abundances[:, m] * 10.0**params[nPT+nradfit+i]
+      aprofiles[m] = abundances[:, m] \
+                     * 10.0**params[nPT+nradfit+nmassfit+nsmafit+i]
 
     # Update H2, He abundances so sum(abundances) = 1.0 in each layer:
     q = 1.0 - np.sum(aprofiles[imetals], axis=0)
     if np.any(q < 0.0):
       if walk == 'unif':
-        mu.comm_gather(comm, -np.ones(nwave), MPI.DOUBLE)
+        mu.comm_gather(comm, -np.ones(nwave),    MPI.DOUBLE)
       else:
         mu.comm_gather(comm, -np.ones(nfilters), MPI.DOUBLE)
       continue
@@ -305,8 +319,7 @@ def main(comm):
     aprofiles[iHe] =         q / (1.0 + ratio)
 
     # Set the 'surface' level:
-    if solution == "transit":
-      trm.set_radius(params[nPT])
+    trm.set_radius(params[nPT])
 
     # Let transit calculate the model spectrum:
     spectrum = trm.run_transit(profiles.flatten(), nwave)
@@ -322,9 +335,6 @@ def main(comm):
           bandflux[i] = w.bandintegrate(spectrum[wnindices[i]], specwn,
                                         nifilter[i], wnindices[i])
     else:
-      #sinterp  = si.interp1d(starwn, starfl)
-      #rstarfl  = sinterp(specwn)
-      #bandflux = (spectrum / rstarfl) * rprs * rprs
       bandflux = spectrum
 
     # Send results back to MCMC:
