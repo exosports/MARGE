@@ -10,6 +10,7 @@ import numpy as np
 
 import keras
 from keras import backend as K
+from keras.layers import ReLU, LeakyReLU, ELU, Softmax
 
 libdir = os.path.dirname(__file__) + '/lib'
 sys.path.append(libdir)
@@ -95,50 +96,231 @@ def MARGE(confile):
             U.make_dir(preddir+'test/')
 
             # Files to save
-            fmean         = conf["fmean"]
-            fstdev        = conf["fstdev"]
-            fmin          = conf["fmin"]
-            fmax          = conf["fmax"]
-            fsize         = conf["fsize"]
-            rmse_file     = conf["rmse_file"]
-            r2_file       = conf["r2_file"]
+            fmean     = conf["fmean"]
+            fstdev    = conf["fstdev"]
+            fmin      = conf["fmin"]
+            fmax      = conf["fmax"]
+            fsize     = conf["fsize"]
+            rmse_file = conf["rmse_file"]
+            r2_file   = conf["r2_file"]
 
             # Data info
-            inD         = conf.getint("input_dim")
-            outD        = conf.getint("output_dim")
+            inD  = conf.getint("input_dim")
+            outD = conf.getint("output_dim")
+            ilog = conf.getboolean("ilog")
+            olog = conf.getboolean("olog")
             if scale:
                 scalelims = [int(num) for num in conf["scalelims"].split(',')]
             else:
                 scalelims = [0., 1.] # Won't change the data values
 
             # Model info
-            weight_file   = outputdir + conf["weight_file"]
-            epochs        = conf.getint("epochs")
-            batch_size    = conf.getint("batch_size")
-            patience      = conf.getint("patience")
-            prelayers     = conf["prelayers"]
-            if prelayers != "None" and prelayers != "":
-                prelayers =  [int(num) for num in prelayers.split()]
-            else:
-                prelayers = None
-            layers        =  [int(num) for num in conf["layers"].split()]
+            weight_file = outputdir + conf["weight_file"]
+            epochs      = conf.getint("epochs")
+            batch_size  = conf.getint("batch_size")
+            patience    = conf.getint("patience")
             if gridsearch:
-                architectures = [[int(num) for num  in arch.split()]
-                                 for arch in conf["architectures"].split('\n')]
-            ilog          = conf.getboolean("ilog")
-            olog          = conf.getboolean("olog")
+                architectures = conf["architectures"].split('\n')
+                layers        = [arch.split() 
+                                 for arch in conf["layers"].split('\n')]
+                lay_params    = [arch.split()
+                                 for arch in conf["lay_params"].split('\n')]
+                nodes         = [[int(num) for num in arch.split()] 
+                                 for arch in conf["nodes"].split('\n')]
+                activations   = [arch.split() 
+                                 for arch in conf["activations"].split('\n')]
+                act_params    = [arch.split()
+                                 for arch in conf["act_params"].split('\n')]
+                # Make sure the right number of entries exist
+                if len(architectures) != len(layers):
+                    raise Exception("Number of architecture names and sets " \
+                                  + "of layers do not match.")
+                elif len(architectures) != len(lay_params):
+                    raise Exception("Number of architecture names and sets " \
+                                  + "of layer parameters do not\nmatch.")
+                elif len(architectures) != len(nodes):
+                    raise Exception("Number of architecture names and sets " \
+                                  + "of nodes do not match.")
+                elif len(architectures) != len(activations):
+                    raise Exception("Number of architecture names and sets " \
+                                  + "of activations do not match.")
+                elif len(architectures) != len(act_params):
+                    raise Exception("Number of architecture names and sets " \
+                                  + "of activation parameters do\nnot match.")
+                for i in range(len(nodes)):
+                    # Check for allowed layer types
+                    if len(layers[i]) - layers[i].count("dense")     \
+                                      - layers[i].count("conv1d")    \
+                                      - layers[i].count("maxpool1d") \
+                                      - layers[i].count("avgpool1d") \
+                                      - layers[i].count("flatten") > 0:
+                        raise Exception('Invalid layer type(s) specified. ' \
+                                      + 'Allowed options: dense, conv1d,\n' \
+                                      + 'maxpool1d, avgpool1d, flatten')
+                    # Number of layers with nodes
+                    nlay = layers[i].count("dense") + layers[i].count("conv1d")
+                    if nlay != len(nodes[i]):
+                        raise Exception("Number of Dense/Conv layers does "  \
+                            + "not match the number of hidden\nlayers with " \
+                            + "nodes.")
+                    if len(layers[i]) != len(lay_params[i]):
+                        raise Exception("Number of layer types does not " \
+                            + "match the number of layer parameters.")
+                    else:
+                        # Set default layer parameters if needed
+                        for j in range(len(layers[i])):
+                            if lay_params[i][j] == 'None':
+                                if layers[i][j] == 'conv1d':
+                                    lay_params[i][j] = 3
+                                elif layers[i][j] == 'maxpool1d' or \
+                                     layers[i][j] == 'avgpool1d':
+                                    lay_params[i][j] = 2
+                            else:
+                                lay_params[i][j] = int(lay_params[i][j])
+                    if len(activations[i]) != len(nodes[i]):
+                        raise Exception("Number of activation functions does " \
+                            + "not match the number of hidden\nlayers with "   \
+                            + "nodes.")
+                    if len(activations[i]) != len(act_params[i]):
+                        raise Exception("Number of activation functions does " \
+                            + "not match the number of\nactivation function "  \
+                            + "parameters.")
+                    else:
+                        # Load the activation functions
+                        for j in range(len(activations[i])):
+                            activations[i][j] = L.load_activation(
+                                                        activations[i][j], 
+                                                        act_params[i][j])
+                            '''
+                          if activations[i][j] == 'exp':
+                            activations[i][j] = 'exponential'
+                          elif activations[i][j] == 'sig':
+                            activations[i][j] = 'sigmoid'
+                          elif activations[i][j] == 'relu':
+                            if act_params[i][j] == 'None':
+                              activations[i][j] = ReLU() #default: no max
+                            else:
+                              act_params [i][j] = float(act_params[i][j])
+                              activations[i][j] = ReLU( act_params[i][j])
+                          elif activations[i][j] == 'leakyrelu':
+                            if act_params[i][j] == 'None':
+                              activations[i][j] = LeakyReLU() #default: 0.3
+                            else:
+                              act_params [i][j] = float(    act_params[i][j])
+                              activations[i][j] = LeakyReLU(act_params[i][j])
+                          elif activations[i][j] == 'elu':
+                            if act_params[i][j] == 'None':
+                              activations[i][j] = ELU() #default: 0.1
+                            else:
+                              act_params [i][j] = float(act_params[i][j])
+                              activations[i][j] = ELU(  act_params[i][j])
+                          elif activations[i][j] == 'softmax':
+                            activations[i][j] = Softmax
+                          elif activations[i][j] == 'None'     \
+                            or activations[i][j] == 'identity' \
+                            or activations[i][j] == 'linear':
+                            activations[i][j] = 'linear'
+                          elif activations[i][j] == 'tanh':
+                            pass
+                          else:
+                            raise Exception('Activation function not ' \
+                                            +'understood: '+activations[i][j])
+                            '''
+            else:
+                architectures = conf["architectures"]
+                layers        = conf["layers"].split()
+                lay_params    = conf["lay_params"].split()
+                nodes         = [int(num) 
+                                 for num in conf["nodes"].split()]
+                activations   = conf["activations"].split()
+                act_params    = conf["act_params"].split()
+                # Check for allowed layer types
+                if len(layers) - layers.count("dense")     \
+                               - layers.count("conv1d")    \
+                               - layers.count("maxpool1d") \
+                               - layers.count("avgpool1d") \
+                               - layers.count("flatten") > 0:
+                    raise Exception('Invalid layer type(s) specified. ' \
+                                  + 'Allowed options: dense, conv1d,\n' \
+                                  + 'maxpool1d, avgpool1d, flatten')
+                # Make sure the right number of entries exist
+                if len(layers) - layers.count("pool1d")               \
+                               - layers.count("flatten") != len(nodes):
+                    raise Exception("Number of Dense/Conv layers does not " \
+                        + "match the number of hidden\nlayers with nodes.")
+                if len(layers) != len(lay_params):
+                    raise Exception("Number of layer types does not match " \
+                        + "the number of layer parameters.")
+                else:
+                    # Set default layer parameters if needed
+                    for j in range(len(layers)):
+                        if lay_params[j] == 'None':
+                            if layers[j] == 'conv1d':
+                                lay_params[j] = 3
+                            elif layers[j] == 'maxpool1d' or \
+                                 layers[j] == 'avgpool1d':
+                                lay_params[j] = 2
+                        else:
+                            lay_params[j] = int(lay_params[j])
+                if len(activations) != len(nodes):
+                    raise Exception("Number of activation functions does "    \
+                        + "not match the number of hidden\nlayers with nodes.")
+                if len(activations) != len(act_params):
+                    raise Exception("Number of activation functions does not " \
+                        + "match the number of\nactivation function "          \
+                        + "parameters.")
+                else:
+                    # Load the activation functions
+                    for j in range(len(activations)):
+                        activations[j] = L.load_activations(activations[j], 
+                                                            act_params[j])
+                        '''
+                      if activations[j] == 'exp':
+                        activations[j] = 'exponential'
+                      elif activations[j] == 'sig':
+                        activations[j] = 'sigmoid'
+                      elif activations[j] == 'relu':
+                        if act_params[j] == 'None':
+                          activations[j] = ReLU() #default: no max
+                        else:
+                          act_params [j] = float(act_params[j])
+                          activations[j] = ReLU( act_params[j])
+                      elif activations[j] == 'leakyrelu':
+                        if act_params[j] == 'None':
+                          activations[j] = LeakyReLU() #default: 0.3
+                        else:
+                          act_params [j] = float(    act_params[j])
+                          activations[j] = LeakyReLU(act_params[j])
+                      elif activations[j] == 'elu':
+                        if act_params[j] == 'None':
+                          activations[j] = ELU() #default: 0.1
+                        else:
+                          act_params [j] = float(act_params[j])
+                          activations[j] = ELU(  act_params[j])
+                      elif activations[j] == 'softmax':
+                        activations[j] = Softmax
+                      elif activations[j] == 'None'     \
+                        or activations[j] == 'identity' \
+                        or activations[j] == 'linear':
+                        activations[j] = 'linear'
+                      elif activations[j] == 'tanh':
+                        pass
+                      else:
+                        raise Exception('Activation function not ' \
+                                        +'understood: '+activations[j])
+                        '''
 
             # Learning rate parameters
-            lengthscale   = conf.getfloat("lengthscale")
-            max_lr        = conf.getfloat("max_lr")
-            clr_mode      = conf["clr_mode"]
-            clr_steps     = conf["clr_steps"]
+            lengthscale = conf.getfloat("lengthscale")
+            max_lr      = conf.getfloat("max_lr")
+            clr_mode    = conf["clr_mode"]
+            clr_steps   = conf["clr_steps"]
 
             # Plotting parameters
-            xlabel        = conf["xlabel"]
-            xvals         = np.load(inputdir + conf["xvals"])
-            ylabel        = conf["ylabel"]
-            plot_cases    = [int(num) for num in conf["plot_cases"].split()]
+            xlabel     = conf["xlabel"]
+            xvals      = np.load(inputdir + conf["xvals"])
+            ylabel     = conf["ylabel"]
+            plot_cases = [int(num) for num in conf["plot_cases"].split()]
 
             # Generate data set
             if datagen:
@@ -160,7 +342,7 @@ def MARGE(confile):
                           inD, outD, ilog, olog, 
                           TFRfile, batch_size, ncores, buffer_size, 
                           gridsearch, architectures, 
-                          prelayers, layers, 
+                          layers, lay_params, activations, act_params, nodes, 
                           lengthscale, max_lr, clr_mode, clr_steps, 
                           epochs, patience, weight_file, resume, 
                           plot_cases, xvals, xlabel, ylabel)

@@ -445,7 +445,7 @@ def load_TFdataset(files, ncores, batch_size, buffer_size,
                    xlen, ylen, 
                    x_mean=None, x_std=None, y_mean=None, y_std=None,
                    x_min=None,  x_max=None, y_min=None,  y_max=None, 
-                   scalelims=None, shuffle=False, convlayers=None):
+                   scalelims=None, shuffle=False):
     """
     Builds data loading pipeline for TFRecords.
 
@@ -467,8 +467,6 @@ def load_TFdataset(files, ncores, batch_size, buffer_size,
     y_max      : array.  Maxima of output data.
     scalelims  : list, floats. [min, max] of range of scaled data.
     shuffle    : bool.         Determines whether to shuffle the order or not.
-    convlayers : list, ints.   If None, no conv layers. Otherwise, specifies 
-                               dimensionality of conv layers.
 
     Outputs
     -------
@@ -499,8 +497,6 @@ def load_TFdataset(files, ncores, batch_size, buffer_size,
     iterator = dataset.make_one_shot_iterator()
     # Create TF representation of the iterator
     x_data, y_data = iterator.get_next()
-    if convlayers is not None:
-        x_data = tf.expand_dims(x_data, -1)
 
     return x_data, y_data
 

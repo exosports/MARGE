@@ -25,12 +25,13 @@ import keras
 from keras import backend as K
 from keras.models  import Sequential, Model
 from keras.metrics import binary_accuracy
-from keras.layers  import Convolution1D, Dense, MaxPooling1D, Flatten, Input, Lambda, Wrapper, merge, concatenate
+from keras.layers  import (Convolution1D, Dense, Reshape,
+                           MaxPooling1D, AveragePooling1D, Flatten, Input, 
+                           Lambda, Wrapper, merge, concatenate)
 from keras.engine  import InputSpec
-from keras.layers.core  import Dense, Dropout, Activation, Layer, Lambda, Flatten
+#from keras.layers.core  import Dense, Dropout, Activation, Layer, Lambda, Flatten
 from keras.regularizers import l2
 from keras.optimizers   import RMSprop, Adadelta, adam
-from keras.layers.advanced_activations import LeakyReLU
 from keras import initializers
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
@@ -64,7 +65,7 @@ class NNModel:
                  x_mean, x_std, y_mean, y_std, 
                  x_min,  x_max, y_min,  y_max, scalelims, 
                  ncores, batch_size, buffer_size, 
-                 convlayers, denselayers, 
+                 layers, lay_params, activations, act_params, nodes, 
                  lengthscale = 1e-3, max_lr=1e-1, 
                  clr_mode='triangular', clr_steps=2000, 
                  weight_file = 'weights.h5', stop_file = './STOP', 
@@ -89,8 +90,13 @@ class NNModel:
         ncores     : int. Number of cores to use for parallel data loading.
         batch_size : int. Size of batches for training/validation/testing.
         buffer_size: int. Number of cases to pre-load in memory.
-        convlayers : list, ints. Dimensionality of conv layers.
-        denselayers: list, ints. Dimensionality of dense layers.
+        layers     : list, str.  Types of hidden layers.
+        lay_params : list, ints. Parameters for the layer type 
+                                 E.g., kernel size
+        activations: list, str.  Activation functions for each hidden layer.
+        act_params : list, floats. Parameters for the activation functions.
+        nodes      : list, ints. For the layers with nodes, 
+                                 number of nodes per layer.
         lengthscale: float. Minimum learning rate.
         max_lr     : float. Maximum learning rate.
         clr_mode   : string. Cyclical learning rate function.
@@ -118,17 +124,17 @@ class NNModel:
                                                 buffer_size, xlen, ylen, 
                                                 x_mean, x_std, y_mean, y_std,
                                                 x_min,  x_max, y_min,  y_max, 
-                                                scalelims, shuffle, convlayers)
+                                                scalelims, shuffle)
         self.Xval, self.Yval = U.load_TFdataset(fvalid_TFR, ncores, batch_size, 
                                                 buffer_size, xlen, ylen, 
                                                 x_mean, x_std, y_mean, y_std,
                                                 x_min,  x_max, y_min,  y_max, 
-                                                scalelims, shuffle, convlayers)
+                                                scalelims, shuffle)
         self.Xte,  self.Yte  = U.load_TFdataset(ftest_TFR,  ncores, batch_size, 
                                                 buffer_size, xlen, ylen, 
                                                 x_mean, x_std, y_mean, y_std,
                                                 x_min,  x_max, y_min,  y_max, 
-                                                scalelims, shuffle, convlayers)
+                                                scalelims, shuffle)
         # Other variables
         self.batch_size  = batch_size
         self.weight_file = weight_file
@@ -143,6 +149,7 @@ class NNModel:
         self.resume      = resume
         
         # Build model
+        '''
         if convlayers is not None:
             # Convolutional layers to mix inputs
             if shuffle:
@@ -175,6 +182,50 @@ class NNModel:
 
         self.model = Model(inp, out)
 
+        '''
+        # New model creation
+        # Input layer
+        if shuffle:
+            inp = Input(shape=(xlen,), tensor=self.X)
+        else:
+            inp = Input(shape=(xlen,))
+        x = inp
+        # Hidden layers
+        n = 0 # Counter for layers with nodes
+        for i in range(len(layers)):
+            if layers[i] == 'conv1d':
+                tshape = tuple(val for val in K.int_shape(x) if val is not None)
+                x = Reshape(tshape + (1,))(x)
+                x = Convolution1D(nb_filter=nodes[n], 
+                                  kernel_size=lay_params[i], 
+                                  activation=activations[n], 
+                                  padding='same')(x)
+                n += 1
+            elif layers[i] == 'dense':
+                if i > 0:
+                    if layers[i-1] == 'conv1d':
+                        print('WARNING: Dense layer follows Conv1d layer. ' \
+                              + 'Flattening.')
+                        x = Flatten()(x)
+                x = Dense(nodes[n], activation=activations[n])(x)
+                n += 1
+            elif layers[i] == 'maxpool1d':
+                if layers[i-1] == 'dense' or layers[i-1] == 'flatten':
+                    raise Exception('MaxPool layers must follow Conv1d or ' \
+                                    + 'Pool layer.')
+                x = MaxPooling1D(pool_size=lay_params[i])(x)
+            elif layers[i] == 'avgpool1d':
+                if layers[i-1] == 'dense' or layers[i-1] == 'flatten':
+                    raise Exception('AvgPool layers must follow Conv1d or ' \
+                                    + 'Pool layer.')
+                x = AveragePooling1D(pool_size=lay_params[i])(x)
+            elif layers[i] == 'flatten':
+                x = Flatten()(x)
+        # Output layer
+        out = Dense(ylen)(x)
+
+        self.model = Model(inp, out)
+            
         # Compile model
         if shuffle:
             self.model.compile(optimizer=adam(lr=self.lengthscale, amsgrad=True), 
@@ -221,9 +272,9 @@ class NNModel:
                 #                   loss=keras.losses.mean_squared_error, 
                 #                   target_tensors=[self.Y])
                 #self.weight_file = self.weight_file.replace('.onnx', '.h5')
-                print('Resuming training for .onnx models is not yet available.')
-                print('Please specify a .h5 file of model weights.')
-                sys.exit()
+                raise Exception('Resuming training for .onnx models is not '   \
+                                + 'yet available. Please specify a\n.h5 file ' \
+                                + 'of model weights.')
             else:
                 self.model.load_weights(self.weight_file)
             sigpickle  = glob.glob(savedir + 'sig.epoch*.pickle')[-1]
@@ -298,7 +349,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
            inD, outD, ilog, olog, 
            TFRfile, batch_size, ncores, buffer_size, 
            gridsearch, architectures, 
-           convlayers, denselayers, 
+           layers, lay_params, activations, act_params, nodes, 
            lengthscale, max_lr, clr_mode, clr_steps, 
            epochs, patience, 
            weight_file, resume, 
@@ -336,8 +387,12 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     gridsearch : bool.   Determines whether to perform a grid search over 
                          `architectures`.
     architectures: list. Model architectures to consider.
-    convlayers : list, ints. Dimensionality of conv  layers.
-    denselayers: list, ints. Dimensionality of dense layers.
+    layers     : list, str.  Types of hidden layers.
+    lay_params : list, ints. Parameters for the layer type 
+                             E.g., kernel size
+    activations: list, str.  Activation functions for each hidden layer.
+    act_params : list, floats. Parameters for the activation functions.
+    nodes      : list, ints. For layers with nodes, number of nodes per layer.
     lengthscale: float.  Minimum learning rat.e
     max_lr     : float.  Maximum learning rate.
     clr_mode   : string. Sets the cyclical learning rate function.
@@ -486,26 +541,25 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
         ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
 
+    # Perform grid search
     if gridsearch:
         # Train a model for each architecture, w/ unique directories
         print("\nPerforming a grid search.\n")
-        archrep = []
-        maxlen  = np.inf
-        for arch in architectures:
-            archstr = '-'.join([str(num) for num in arch])
-            archrep.append(archstr)
-            if len(archstr) < maxlen:
-                maxlen = len(archstr)
-            archdir = os.path.join(outputdir, archstr, '')
+        maxlen = 0
+        for i, arch in enumerate(architectures):
+            if len(arch) > maxlen:
+                maxlen = len(arch)
+            archdir = os.path.join(outputdir, arch, '')
             wsplit  = weight_file.rsplit('/', 1)[1].rsplit('.', 1)
-            wfile   = archdir + wsplit[0] + '_' + archstr + '.' + wsplit[1]
+            wfile   = archdir + wsplit[0] + '_' + arch + '.' + wsplit[1]
             U.make_dir(archdir)
             nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
                          inD, outD, 
                          x_mean, x_std, y_mean, y_std, 
                          x_min,  x_max, y_min,  y_max, scalelims, 
                          ncores, batch_size, buffer_size, 
-                         None, arch, 
+                         layers[i], lay_params[i], 
+                         activations[i], act_params[i], nodes[i], 
                          lengthscale, max_lr, clr_mode, clr_steps, 
                          wfile, stop_file='./STOP', 
                          train_flag=True, shuffle=True)
@@ -515,18 +569,16 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         minvl = np.ones(len(architectures)) * np.inf
         print('Grid search summary')
         print('-------------------')
+        with open(outputdir + 'gridsearch.txt', 'w') as foo:
+            foo.write('Grid search summary\n')
+            foo.write('-------------------\n')
         for i, arch in enumerate(architectures):
-            archstr  = archrep[i]
-            archdir  = os.path.join(outputdir, archstr, '')
+            archdir  = os.path.join(outputdir, arch, '')
             history  = np.load(archdir+'history.npz')
             minvl[i] = np.amin(history['val_loss'])
-            print(archstr.ljust(maxlen, ' ') + ': ' + str(minvl[i]))
-            if i == 0:
-                mode = 'w'
-            else:
-                mode = 'a'
-            with open(outputdir + 'gridsearch.txt', mode) as foo:
-                foo.write(archstr.ljust(maxlen, ' ') + ': ' \
+            print(arch.ljust(maxlen, ' ') + ': ' + str(minvl[i]))
+            with open(outputdir + 'gridsearch.txt', 'a') as foo:
+                foo.write(arch.ljust(maxlen, ' ') + ': ' \
                           + str(minvl[i]) + '\n')
         return
 
@@ -538,7 +590,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                      x_mean, x_std, y_mean, y_std, 
                      x_min,  x_max, y_min,  y_max, scalelims, 
                      ncores, batch_size, buffer_size, 
-                     convlayers, denselayers, 
+                     layers, lay_params, activations, act_params, nodes, 
                      lengthscale, max_lr, clr_mode, clr_steps, 
                      weight_file, stop_file='./STOP', 
                      train_flag=True, shuffle=True, resume=resume)
@@ -552,7 +604,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                  x_mean, x_std, y_mean, y_std, 
                  x_min,  x_max, y_min,  y_max, scalelims, 
                  ncores, batch_size, buffer_size, 
-                 convlayers, denselayers, 
+                 layers, lay_params, activations, act_params, nodes, 
                  lengthscale, max_lr, clr_mode, clr_steps, 
                  weight_file, stop_file='./STOP', 
                  train_flag=False, shuffle=False, resume=False)
