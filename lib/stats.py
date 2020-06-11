@@ -14,6 +14,8 @@ r2: Calcualtes the coefficient of determination (R^2) for some predictions
 import sys, os
 import glob
 import numpy as np
+import scipy.interpolate as si
+
 from keras import backend as K
 
 import utils as U
@@ -116,175 +118,185 @@ def mean_stdev(datafiles, inD, ilog, olog, perc=10, num_per_file=None, verb=Fals
     return mean, variance**0.5, datmin, datmax
 
 
-def rmse(nn, batch_size, num_batches, D, 
-         y_mean, y_std, y_min, y_max, scalelims, preddir, 
-         mode, denorm=False):
+def rmse_r2(fpred, ftrue, y_mean, 
+            y_std=None, y_min=None, y_max=None, scalelims=None, olog=False, 
+            filters=None, x_vals=None, filt2um=1.0):
     """
-    Calculates the RMSE for the specified trained models.
+    Calculates the root mean squared error (RMSE) and R-squared for a data set.
+    Data must be saved in .NPY file(s), and `fpred` and `ftrue` must exactly 
+    correspond.
+
+    Default behavior: compute RMSE/R2 for the raw predictions.
+
+    If y_std, y_min, y_max, scalelims, and olog are specified, 
+    it will compute RMSE/R2 for both the raw and denormalized predictions.
+
+    If filters and x_vals are specified, then the RMSE/R2 will be computed on  
+    the integrated filter bandpasses, rather than for each output parameter.
 
     Inputs
     ------
-    nn          : object. NN model.
-    batch_size  : int.    Size of batches for the model.
-    num_batches : int.    Number of batches in the dataset.
-    D           : int.    Dimensionality of the output.
-    y_mean      : arr, float.  Mean of the output/target parameters.
-    y_std       : arr, float.  Standard deviation of the output parameters.
-    y_min       : arr, float.  Minima of the output parameters.
-    y_max       : arr, float.  Maxima of the output parameters.
-    scalelims   : list, float. [min, max] of range the data has been scaled to.
-    preddir     : string. Path/to/directory to save the predictions.
-    mode        : string. 'val' or 'test' to compute the RMSE for the 
-                          validation or test data, respectively.
-    denorm      : bool.   Determines if to calculate the denormalized
-                          RMSE (True) or the normalized RMSE (False).
+    fpred: list, strings. .NPY files to compute RMSE, predicted values.
+    ftrue: list, strings. .NPY files to compute RMSE, true      values.
+    y_mean: array. Training set mean value of each output parameter.
+    y_std : array. Training set standard deviation of each output parameter.
+    y_min : array. Training set minimum of each output parameter.
+    y_max : array. Training set maximum of each output parameter.
+    scalelims: tuple/list/array. Min/max that the normalized data was scaled to.
+    olog  : bool.  Determines if the denormalized values are the log10 of the 
+                   true output parameters.
+    filters: list, strings. Filter bandpasses to integrate over.
+                            Must be 2-column file: wavelength then transmission.
+    x_vals : array.         X values corresponding to the Y values.
+    filt2um: float.         Conversion factor for filter's wavelengths to 
+                            microns.
 
     Outputs
     -------
-    rmse: array.  RMSE for each parameter.
+    rmse_norm  : array. RMSE for each parameter,   normalized data.
+    rmse_denorm: array. RMSE for each parameter, denormalized data.
+    r2_norm    : array. R2   for each parameter,   normalized data.
+    r2_denorm  : array. R2   for each parameter, denormalized data.
 
+    Notes
+    -----
+    Data will only be denormalized if y_std, y_min, y_max, scalelims, and olog 
+    are all not None.
     """
-    if mode == 'val':
-        fpred = preddir+'valid/'+mode+'pred'
-        ftrue = preddir+'valid/'+mode+'true'
-        X     = nn.Xval
-        Y     = nn.Yval
-    elif mode == 'test':
-        fpred = preddir+'test/'+mode+'pred'
-        ftrue = preddir+'test/'+mode+'true'
-        X     = nn.Xte
-        Y     = nn.Yte
+    if len(fpred) != len(ftrue):
+        raise Exception("The prediction/true file structures do not match.\n" +\
+                        "Ensure that each set of files follows the same "     +\
+                        "exact structure and order.\nSee NNModel.Yeval().")
+
+    # Integrate over filter bandpasses?
+    if filters is not None and x_vals is not None:
+        integ = True
+        # Load filters
+        nfilters = len(filters)
+        filttran = []
+        ifilt = np.zeros((nfilters, 2), dtype=int)
+        meanwn = []
+        for i in range(nfilters):
+            datfilt = np.loadtxt(filters[i])
+            # Convert filter wavelenths to microns, then convert um -> cm-1
+            finterp = si.interp1d(10000. / (filt2um * datfilt[:,0]), 
+                                  datfilt[:,1],
+                                  bounds_error=False, fill_value=0)
+            # Interpolate and normalize
+            tranfilt = finterp(x_vals)
+            tranfilt = tranfilt / np.trapz(tranfilt, x_vals)
+            meanwn.append(np.sum(x_vals*tranfilt)/sum(tranfilt))
+            # Find non-zero indices for faster integration
+            nonzero = np.where(tranfilt!=0)
+            ifilt[i, 0] = max(nonzero[0][ 0] - 1, 0)
+            ifilt[i, 1] = min(nonzero[0][-1] + 1, len(x_vals)-1)
+            filttran.append(tranfilt[ifilt[i,0]:ifilt[i,1]]) # Store filter
     else:
-        raise ValueError("Invalid specification for `mode` parameter of " + \
-                         "rmse().\nAllowed options: 'val' or 'test'"      + \
-                         "\nPlease correct this and try again.")
+        integ = False
 
-    # Variables for calculating RMSE
-    n    = 0
-    sqer = 0
-    # Check for predictions
-    predfoo = sorted(glob.glob(fpred+'*'))
-    if len(predfoo) != num_batches:
-        print("Predicting on input data...")
-        preds = np.zeros((batch_size, D))
-        for j in range(num_batches):
-            fname = fpred+str(j).zfill(len(str(num_batches)))+'.npy'
-            x_batch = K.eval(X)
-            preds   = nn.model.predict(x_batch)
-            np.save(fname, preds)
-            print("  Batch "+str(j+1)+"/"+str(num_batches), end='\r')
-        print('')
-        predfoo = sorted(glob.glob(fpred+'*'))
-    # Get the true values
-    truefoo = sorted(glob.glob(ftrue+'*'))
-    print("\nComputing squared error...")
-    for i in range(num_batches):
-        fname = ftrue+str(i).zfill(len(str(num_batches)))+'.npy'
-        if len(truefoo) != num_batches:
-            y_batch = K.eval(Y)
-        else:
-            y_batch = np.load(truefoo[i])
-        # Denormalize the predictions and the normalized true values
-        preds = np.load(predfoo[i])
-        if denorm:
-            preds   = U.denormalize(U.descale(preds, 
-                                              y_min, y_max, scalelims),
-                                    y_mean, y_std)
-            y_batch = U.denormalize(U.descale(y_batch, 
-                                              y_min, y_max, scalelims), 
-                                    y_mean, y_std)
-
-        # Add the squared difference to the running mean
-        n    += y_batch.shape[0]
-        sqer += np.sum((preds - y_batch)**2, axis=0)
-        if len(truefoo) != num_batches:
-            np.save(fname, y_batch)
-        print("  Batch "+str(i+1)+"/"+str(num_batches), end='\r')
-    # Calculate the RMSE and store it
-    rmse = (sqer/n)**0.5
-    print("")
-
-    return rmse
-
-
-def r2(nn, batch_size, num_batches, D, 
-       y_mean, y_std, y_min, y_max, scalelims, preddir, 
-       mode, denorm=False):
-    """
-    Computes the coefficient of determination (R2) between predictions and true
-    values.
-
-    Inputs
-    ------
-    nn          : object. NN model.
-    batch_size  : int.    Size of batches for the model.
-    num_batches : int.    Number of batches in the dataset.
-    D           : int.    Dimensionality of the output.
-    y_mean      : arr, float.  Mean of the output/target parameters.
-    y_std       : arr, float.  Standard deviation of the output parameters.
-    y_min       : arr, float.  Minima of the output parameters.
-    y_max       : arr, float.  Maxima of the output parameters.
-    scalelims   : list, float. [min, max] of range the data has been scaled to.
-    preddir     : string. Path/to/directory to save the predictions.
-    mode        : string. 'val' or 'test' to compute the RMSE for the 
-                          validation or test data, respectively.
-    denorm      : bool.   Determines if to calculate the denormalized
-                          R2 (True) or the normalized R2 (False).
-
-    Outputs
-    -------
-    R2_score: arr, float. R2 value for each output.
-
-    """
-    if mode == 'val':
-        fpred = preddir+'valid/'+mode+'pred'
-        ftrue = preddir+'valid/'+mode+'true'
-        X     = nn.Xval
-        Y     = nn.Yval
-    elif mode == 'test':
-        fpred = preddir+'test/'+mode+'pred'
-        ftrue = preddir+'test/'+mode+'true'
-        X     = nn.Xte
-        Y     = nn.Yte
+    if all(v is not None for v in [y_std, y_min, y_max, scalelims, olog]):
+        denorm = True
     else:
-        raise ValueError("Invalid specification for `mode` parameter of " + \
-                         "r2().\nAllowed options: 'val' or 'test'"        + \
-                         "\nPlease correct this and try again.")
+        denorm = False
 
-    mss = np.zeros(D) # Model sum of squares
-    tss = np.zeros(D) # True  sum of squares
-    rss = np.zeros(D) # Residual sum of squares
+    # Variables for computing RMSE & R2
+    n    = 0 # number of cases seen
+    sqer = 0 # squared error
+    mss  = 0 # Model sum of squares
+    tss  = 0 # True  sum of squares
+    rss  = 0 # Residual sum of squares
+    if denorm:
+        sqer_denorm = 0 # The above, for denormalized values
+        mss_denorm  = 0
+        tss_denorm  = 0
+        rss_denorm  = 0
     # By definition, R2 = 1 - rss / tss
     # If mss + rss = tss then R2 = mss / tss
 
-    print('\nCalculating R squared...')
-    # Iterate through the batches
-    for i in range(num_batches):
-        # Load data
-        suffix = str(i).zfill(len(str(num_batches)))+'.npy'
-        pred   = np.load(fpred+suffix)
-        true   = np.load(ftrue+suffix)
+    ### Helper functions to avoid repeating code
+    def squared_diffs(pred, true, y_mean):
+        """
+        Computes squared differences for RMSE/R2 calculations.
+        """
+        sqer  = np.sum((pred - true  )**2, axis=0)
+        mss   = np.sum((pred - y_mean)**2, axis=0)
+        tss   = np.sum((true - y_mean)**2, axis=0)
+        rss   = np.sum((true - pred  )**2, axis=0)
+        return sqer, mss, tss, rss
+
+    def integ_spec(pred, true, y_mean, x_vals, filttran, ifilt):
+        """
+        Integrates and predicted and true spectrum according to filter 
+        bandpasses.
+        """
+        nfilters = len(filttran)
+        pred_res = np.zeros((pred.shape[0], nfilters))
+        true_res = np.zeros((true.shape[0], nfilters))
+        y_mean_res = np.zeros(nfilters)
+        for i in range(nfilters):
+            pred_spec      = pred[:,ifilt[i,0]:ifilt[i,1]]
+            true_spec      = true[:,ifilt[i,0]:ifilt[i,1]]
+            xval_spec      = x_vals[ifilt[i,0]:ifilt[i,1]]
+            y_mean_spec    = y_mean[ifilt[i,0]:ifilt[i,1]]
+            pred_res[:, i] = np.trapz(pred_spec * filttran[i], xval_spec, 
+                                      axis=-1)
+            true_res[:, i] = np.trapz(true_spec * filttran[i], xval_spec, 
+                                      axis=-1)
+            y_mean_res[i]  = np.trapz(y_mean_spec * filttran[i], xval_spec)
+        return pred_res, true_res, y_mean_res
+
+    # Compute RMSE & R2
+    for j in range(len(fpred)):
+        # Load batch
+        pred  = np.load(fpred[j])
+        true  = np.load(ftrue[j])
+        # Add contributions to RMSE/R2
+        if integ:
+            pred_res, true_res, y_mean_res = integ_spec(pred, true, y_mean, x_vals, filttran, ifilt)
+            contribs = squared_diffs(pred_res, true_res, y_mean_res)
+            
+        else:
+            contribs = squared_diffs(pred, true, y_mean)
+        n    += pred.shape[0]
+        sqer += contribs[0]
+        mss  += contribs[1]
+        tss  += contribs[2]
+        rss  += contribs[3]
 
         if denorm:
+            # Calculate this for the denormalized values
             pred = U.denormalize(U.descale(pred, 
                                            y_min, y_max, scalelims),
                                  y_mean, y_std)
             true = U.denormalize(U.descale(true, 
-                                           y_min, y_max, scalelims), 
+                                           y_min, y_max, scalelims),
                                  y_mean, y_std)
-        else:
-            y_mean = U.scale(U.normalize(y_mean, y_mean, y_std), 
-                             y_min, y_max, scalelims)
-
-        # Add the squared differences
-        mss += np.sum((pred - y_mean)**2, axis=0)
-        tss += np.sum((true - y_mean)**2, axis=0)
-        rss += np.sum((true - pred  )**2, axis=0)
-        print("  Batch "+str(i+1)+"/"+str(num_batches), end='\r')
+            if olog:
+                pred = 10**pred
+                true = 10**true
+            if integ:
+                pred_res, true_res, y_mean_res = integ_spec(pred,     true, 
+                                                            y_mean,   x_vals, 
+                                                            filttran, ifilt )
+                contribs = squared_diffs(pred_res, true_res, y_mean_res)
+            else:
+                contribs = squared_diffs(pred, true, y_mean)
+            sqer_denorm += contribs[0]
+            mss_denorm  += contribs[1]
+            tss_denorm  += contribs[2]
+            rss_denorm  += contribs[3]
+        print("  Batch "+str(j+1)+"/"+str(len(fpred)), end='\r')
     print('')
+    rmse = (sqer / n)**0.5
+    r2   = 1 - rss / tss
 
-    R2_score = 1 - rss / tss
+    if denorm:
+        rmse_denorm = (sqer_denorm / n)**0.5
+        r2_denorm   = 1 - rss_denorm / tss_denorm
+    else:
+        rmse_denorm = -1
+        r2_denorm   = -1
 
-    return R2_score
-
+    return rmse, rmse_denorm, r2, r2_denorm
+    
 

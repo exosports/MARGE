@@ -6,16 +6,16 @@ Driver for MARGE
 
 import configparser
 import sys, os
+import importlib
 import numpy as np
 
 import keras
 from keras import backend as K
 from keras.layers import ReLU, LeakyReLU, ELU, Softmax
 
-libdir = os.path.dirname(__file__) + '/lib'
+libdir = os.path.dirname(__file__) + '/lib/'
 sys.path.append(libdir)
 
-import datagen as D
 import loader  as L
 import NN
 import stats   as S
@@ -46,29 +46,6 @@ def MARGE(confile):
         if section != "DEFAULT":
             conf = config[section]
             ### Unpack the variables ###
-            # Top-level params
-            datagen     = conf.getboolean("datagen")
-            code        = conf["code"]
-            cfile       = conf["cfile"]
-            processdat  = conf.getboolean("processdat")
-            preservedat = conf.getboolean("preservedat")
-            NNmodel     = conf.getboolean("NNmodel")
-            gridsearch  = conf.getboolean("gridsearch")
-            trainflag   = conf.getboolean("trainflag")
-            validflag   = conf.getboolean("validflag")
-            testflag    = conf.getboolean("testflag")
-            resume      = conf.getboolean("resume")
-            TFRfile     = conf["TFR_file"]
-            if TFRfile != '':
-                TFRfile = TFRfile + '_' # Separator for file names
-            buffer_size = conf.getint("buffer")
-            ncores      = conf.getint("ncores")
-            if  ncores  > os.cpu_count():
-                ncores  = os.cpu_count()
-            normalize   = conf.getboolean("normalize")
-            scale       = conf.getboolean("scale")
-            seed        = conf.getint("seed")
-
             # Directories
             inputdir  = os.path.abspath(conf["inputdir" ]) + '/'
             outputdir = os.path.abspath(conf["outputdir"]) + '/'
@@ -91,9 +68,44 @@ def MARGE(confile):
             U.make_dir(outputdir)
             U.make_dir(plotdir)
             U.make_dir(datadir)
+            U.make_dir(datadir+'train/')
+            U.make_dir(datadir+'valid/')
+            U.make_dir(datadir+'test/')
             U.make_dir(preddir)
             U.make_dir(preddir+'valid/')
             U.make_dir(preddir+'test/')
+            # Import the datagen module
+            datagenfile = conf["datagenfile"].rsplit('/', 1)
+            if len(datagenfile) == 2:
+                if os.path.isabs(datagenfile[0]):
+                    sys.path.append(datagenfile[0])
+                else:
+                    sys.path.append(inputdir+datagenfile[0])
+            else:
+                sys.path.append(inputdir)          # Look in inputdir first
+                sys.path.append(libdir+'datagen/') # Check lib/datagen/ after
+            D = importlib.import_module(datagenfile[-1])
+            # Main options
+            datagen     = conf.getboolean("datagen")
+            cfile       = conf["cfile"]
+            processdat  = conf.getboolean("processdat")
+            preservedat = conf.getboolean("preservedat")
+            NNmodel     = conf.getboolean("NNmodel")
+            gridsearch  = conf.getboolean("gridsearch")
+            trainflag   = conf.getboolean("trainflag")
+            validflag   = conf.getboolean("validflag")
+            testflag    = conf.getboolean("testflag")
+            resume      = conf.getboolean("resume")
+            TFRfile     = conf["TFR_file"]
+            if TFRfile != '':
+                TFRfile = TFRfile + '_' # Separator for file names
+            buffer_size = conf.getint("buffer")
+            ncores      = conf.getint("ncores")
+            if  ncores  > os.cpu_count():
+                ncores  = os.cpu_count()
+            normalize   = conf.getboolean("normalize")
+            scale       = conf.getboolean("scale")
+            seed        = conf.getint("seed")
 
             # Files to save
             fmean     = conf["fmean"]
@@ -113,9 +125,22 @@ def MARGE(confile):
                 scalelims = [int(num) for num in conf["scalelims"].split(',')]
             else:
                 scalelims = [0., 1.] # Won't change the data values
+            try:
+                filters = conf["filters"].split()
+                filt2um = float(conf["filt2um"])
+                print('\nFilters specified. Will compute performance ' \
+                    + 'metrics over integrated bandpasses.\n')
+            except:
+                filters = None
+                filt2um = 1.
+                print('\nFilters not specified. Will compute performance ' \
+                    + 'metrics for each output.\n')
 
             # Model info
-            weight_file = outputdir + conf["weight_file"]
+            if not os.path.isabs(conf["weight_file"]):
+                weight_file = outputdir + conf["weight_file"]
+            else:
+                weight_file = conf["weight_file"]
             epochs      = conf.getint("epochs")
             batch_size  = conf.getint("batch_size")
             patience    = conf.getint("patience")
@@ -191,41 +216,6 @@ def MARGE(confile):
                             activations[i][j] = L.load_activation(
                                                         activations[i][j], 
                                                         act_params[i][j])
-                            '''
-                          if activations[i][j] == 'exp':
-                            activations[i][j] = 'exponential'
-                          elif activations[i][j] == 'sig':
-                            activations[i][j] = 'sigmoid'
-                          elif activations[i][j] == 'relu':
-                            if act_params[i][j] == 'None':
-                              activations[i][j] = ReLU() #default: no max
-                            else:
-                              act_params [i][j] = float(act_params[i][j])
-                              activations[i][j] = ReLU( act_params[i][j])
-                          elif activations[i][j] == 'leakyrelu':
-                            if act_params[i][j] == 'None':
-                              activations[i][j] = LeakyReLU() #default: 0.3
-                            else:
-                              act_params [i][j] = float(    act_params[i][j])
-                              activations[i][j] = LeakyReLU(act_params[i][j])
-                          elif activations[i][j] == 'elu':
-                            if act_params[i][j] == 'None':
-                              activations[i][j] = ELU() #default: 0.1
-                            else:
-                              act_params [i][j] = float(act_params[i][j])
-                              activations[i][j] = ELU(  act_params[i][j])
-                          elif activations[i][j] == 'softmax':
-                            activations[i][j] = Softmax
-                          elif activations[i][j] == 'None'     \
-                            or activations[i][j] == 'identity' \
-                            or activations[i][j] == 'linear':
-                            activations[i][j] = 'linear'
-                          elif activations[i][j] == 'tanh':
-                            pass
-                          else:
-                            raise Exception('Activation function not ' \
-                                            +'understood: '+activations[i][j])
-                            '''
             else:
                 architectures = conf["architectures"]
                 layers        = conf["layers"].split()
@@ -239,13 +229,16 @@ def MARGE(confile):
                                - layers.count("conv1d")    \
                                - layers.count("maxpool1d") \
                                - layers.count("avgpool1d") \
-                               - layers.count("flatten") > 0:
+                               - layers.count("flatten")   \
+                               - layers.count("dropout") > 0:
                     raise Exception('Invalid layer type(s) specified. ' \
                                   + 'Allowed options: dense, conv1d,\n' \
                                   + 'maxpool1d, avgpool1d, flatten')
                 # Make sure the right number of entries exist
-                if len(layers) - layers.count("pool1d")               \
-                               - layers.count("flatten") != len(nodes):
+                if len(layers) - layers.count("maxpool1d")            \
+                               - layers.count("avgpool1d")            \
+                               - layers.count("flatten")              \
+                               - layers.count("dropout") != len(nodes):
                     raise Exception("Number of Dense/Conv layers does not " \
                         + "match the number of hidden\nlayers with nodes.")
                 if len(layers) != len(lay_params):
@@ -260,6 +253,8 @@ def MARGE(confile):
                             elif layers[j] == 'maxpool1d' or \
                                  layers[j] == 'avgpool1d':
                                 lay_params[j] = 2
+                        elif layers[j] == 'dropout':
+                            lay_params[j] = float(lay_params[j])
                         else:
                             lay_params[j] = int(lay_params[j])
                 if len(activations) != len(nodes):
@@ -272,43 +267,8 @@ def MARGE(confile):
                 else:
                     # Load the activation functions
                     for j in range(len(activations)):
-                        activations[j] = L.load_activations(activations[j], 
-                                                            act_params[j])
-                        '''
-                      if activations[j] == 'exp':
-                        activations[j] = 'exponential'
-                      elif activations[j] == 'sig':
-                        activations[j] = 'sigmoid'
-                      elif activations[j] == 'relu':
-                        if act_params[j] == 'None':
-                          activations[j] = ReLU() #default: no max
-                        else:
-                          act_params [j] = float(act_params[j])
-                          activations[j] = ReLU( act_params[j])
-                      elif activations[j] == 'leakyrelu':
-                        if act_params[j] == 'None':
-                          activations[j] = LeakyReLU() #default: 0.3
-                        else:
-                          act_params [j] = float(    act_params[j])
-                          activations[j] = LeakyReLU(act_params[j])
-                      elif activations[j] == 'elu':
-                        if act_params[j] == 'None':
-                          activations[j] = ELU() #default: 0.1
-                        else:
-                          act_params [j] = float(act_params[j])
-                          activations[j] = ELU(  act_params[j])
-                      elif activations[j] == 'softmax':
-                        activations[j] = Softmax
-                      elif activations[j] == 'None'     \
-                        or activations[j] == 'identity' \
-                        or activations[j] == 'linear':
-                        activations[j] = 'linear'
-                      elif activations[j] == 'tanh':
-                        pass
-                      else:
-                        raise Exception('Activation function not ' \
-                                        +'understood: '+activations[j])
-                        '''
+                        activations[j] = L.load_activation(activations[j], 
+                                                           act_params[j])
 
             # Learning rate parameters
             lengthscale = conf.getfloat("lengthscale")
@@ -318,18 +278,18 @@ def MARGE(confile):
 
             # Plotting parameters
             xlabel     = conf["xlabel"]
-            xvals      = np.load(inputdir + conf["xvals"])
+            fxvals     = inputdir + conf["xvals"] # Will be loaded in NN.py
             ylabel     = conf["ylabel"]
             plot_cases = [int(num) for num in conf["plot_cases"].split()]
 
             # Generate data set
             if datagen:
                 print('\nMode: Generate data\n')
-                D.generate_data(code, inputdir+cfile)
+                D.generate_data(inputdir+cfile)
 
             if processdat:
                 print('\nMode: Process data\n')
-                D.process_data(code, inputdir+cfile, datadir, preservedat)
+                D.process_data(inputdir+cfile, datadir, preservedat)
 
             # Train a model
             if NNmodel:
@@ -345,7 +305,8 @@ def MARGE(confile):
                           layers, lay_params, activations, act_params, nodes, 
                           lengthscale, max_lr, clr_mode, clr_steps, 
                           epochs, patience, weight_file, resume, 
-                          plot_cases, xvals, xlabel, ylabel)
+                          plot_cases, fxvals, xlabel, ylabel, 
+                          filters, filt2um)
 
     return
 

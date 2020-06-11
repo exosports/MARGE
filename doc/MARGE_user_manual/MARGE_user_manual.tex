@@ -306,28 +306,31 @@ if generating data via BART, the user must create a BART configuration file
 \item inputdir   : str.  Directory containing MARGE inputs.
 \item outputdir  : str.  Directory containing MARGE outputs.
 \item plotdir    : str.  Directory to save plots. 
-                         If relative path, subdirectory within 
+                         If relative path, it is with respect to 
                          \texttt{`}outputdir\texttt{`}.
 \item datadir    : str.  Directory to store generated data. 
-                         If relative path, subdirectory within 
+                         If relative path, it is with respect to 
                          \texttt{`}outputdir\texttt{`}.
 \item preddir    : str.  Directory to store validation and test set predictions 
                          and true values. 
-                         If relative path, subdirectory within 
+                         If relative path, it is with respect to 
                          \texttt{`}outputdir\texttt{`}.
 \end{itemize}
 
 \noindent \underline{Datagen Parameters}
 \begin{itemize}
+\item datagenfile: str.  Module file that contains generate_data() and 
+                         process_data() functions.
+                         If relative path, assumed too be with respect to 
+                         \texttt{`}inputdir\texttt{`}.
 \item datagen    : bool. Determines whether to generate data.
-\item code       : str.  Determines the code to use for data generation.
 \item cfile      : str.  Name of the \texttt{`}code\texttt{`} configuration 
                          file for data generation.
                    Note: MUST be located in \texttt{`}inputdir\texttt{`}!
 \item processdat : bool. Determines whether to process the generated data.
 \item preservedat: bool. Determines whether to preserve the unprocessed data 
                          after completing data processing.
-                   \textbf{Note}: if True, it will PERMANENTLY DELETE the 
+                   \textbf{Note}: if False, it will PERMANENTLY DELETE the 
                           original, unprocessed data!
 \end{itemize}
 
@@ -341,6 +344,8 @@ if generating data via BART, the user must create a BART configuration file
 \item trainflag  : bool. Determines whether to train    an NN model.
 \item validflag  : bool. Determines whether to validate an NN model.
 \item testflag   : bool. Determines whether to test     an NN model.
+\item gridsearch : bool. Determines whether to perform a grid search over 
+                         architectures.
 
 \item TFR\_file   : str.  Prefix for the TFRecords files to be created.
 \item buffer     : int.  Number of batches to pre-load into memory.
@@ -360,8 +365,45 @@ if generating data via BART, the user must create a BART configuration file
 \item ilog       : bool. Determines whether to take the log10 of input  data.
 \item olog       : bool. Determines whether to take the log10 of output data.
 
-\item convlayers : ints. Number of nodes for each convolutional layer.
-\item denselayers: ints. Number of nodes for each dense         layer.
+\item architectures: str. Identifying names for each model architecture.
+                          Names must not contain spaces.
+                          If performing a grid search, separate each name with 
+                          a space or new line.
+\item nodes        : int. Number of nodes for each layer with nodes.
+                          Separate each layer's nodes using a space.
+                          If performing a grid search, separate each set of 
+                          nodes with a new line.
+\item layers       : str. Layers of the NN. Separate each layer with a space. 
+                          If performing a grid search, separate each set of 
+                          layers with a new line.
+                          Options: conv1d (1D convolutional layer), 
+                                   flatten (flatten to 1D), 
+                                   dense (fully-connected layer), 
+                                   maxpool1d (1D max pooling layer), 
+                                   avgpool1d (1D average pooling layer)
+\item lay\_params  : str. Parameters to pass to layers (e.g., kernel size).
+                          If no parameter or Default, use None.
+                          Separate each parameter with a space.
+                          If performing a grid search, separate each set of 
+                          parameters with a new line.
+\item activations  : str. Activation function for each layer w/ nodes.
+                          Separate each activation with a space.
+                          If performing a grid search, separate each set of 
+                          activations with a new line.
+                          Options: None/identity/linear (linear activation), 
+                                   relu (Rectified Linear Unit), 
+                                   leakyrelu (leaky ReLU), 
+                                   exp (exponential), 
+                                   elu (exponential linear unit), 
+                                   tanh (hyperbolic tangent), 
+                                   sig (sigmoid), 
+                                   softmax
+\item act\_params  : float. Parameters to pass to activations. 
+                            Use None for default/no parameter.
+                            Separate each parameter with a space.
+                            If performing a grid search, separate each set of 
+                            parameters with a new line.
+
 \item epochs     : int.  Maximum number of iterations through the training 
                          data set.
 \item patience   : int.  Early-stopping criteria; stops training after 
@@ -395,8 +437,8 @@ if generating data via BART, the user must create a BART configuration file
 
 \noindent \underline{Plotting Parameters}
 \begin{itemize}
-\item xval\_label : str.  X-axis label for plots.
-\item yval\_label : str.  Y-axis label for plots.
+\item xlabel : str.  X-axis label for plots.
+\item ylabel : str.  Y-axis label for plots.
 \item plot\_cases : ints. Specifies which cases in the test set should be 
                    plotted vs. the true spectrum.
                    Note: must be separated by spaces or indented new lines.
@@ -404,6 +446,8 @@ if generating data via BART, the user must create a BART configuration file
 
 \noindent \underline{Statistics Files}
 \begin{itemize}
+\item fsize      : str.  Name of the file containing the size of each data set
+                         (training, validation, testing).
 \item fmean      : str.  Name of the file containing the mean of each input/output.
 \item fstdev     : str.  Name of the file containing the standard deviation of each 
                    input/output.

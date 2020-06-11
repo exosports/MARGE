@@ -325,8 +325,7 @@ def make_TFRecord(fname, files, inD, ilog, olog,
         writer = tf.python_io.TFRecordWriter(thisfile)
         for j in range(min(split, filesleft)):
             # Load file
-            x, y = L.load_data_file(files[i*split+j], 
-                                                inD, ilog, olog)
+            x, y = L.load_data_file(files[i*split+j], inD, ilog, olog)
             filesleft -= 1
             # Print progress updates
             if verb:

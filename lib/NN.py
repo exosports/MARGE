@@ -25,8 +25,8 @@ import keras
 from keras import backend as K
 from keras.models  import Sequential, Model
 from keras.metrics import binary_accuracy
-from keras.layers  import (Convolution1D, Dense, Reshape,
-                           MaxPooling1D, AveragePooling1D, Flatten, Input, 
+from keras.layers  import (Input, Convolution1D, Dense, Reshape,
+                           MaxPooling1D, AveragePooling1D, Dropout, Flatten,  
                            Lambda, Wrapper, merge, concatenate)
 from keras.engine  import InputSpec
 #from keras.layers.core  import Dense, Dropout, Activation, Layer, Lambda, Flatten
@@ -36,8 +36,8 @@ from keras import initializers
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 
-import onnx
-import keras2onnx
+#import onnx
+#import keras2onnx
 #from   onnx2keras import onnx_to_keras
 
 import GPyOpt
@@ -61,10 +61,10 @@ class NNModel:
     """
     
     def __init__(self, ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                 xlen, ylen, 
+                 xlen, ylen, olog, 
                  x_mean, x_std, y_mean, y_std, 
                  x_min,  x_max, y_min,  y_max, scalelims, 
-                 ncores, batch_size, buffer_size, 
+                 ncores, buffer_size, batch_size, nbatches, 
                  layers, lay_params, activations, act_params, nodes, 
                  lengthscale = 1e-3, max_lr=1e-1, 
                  clr_mode='triangular', clr_steps=2000, 
@@ -78,6 +78,7 @@ class NNModel:
         ftest_TFR  : list, strings. TFRecords for the test       data.
         xlen       : int.   Dimensionality of the inputs.
         ylen       : int.   Dimensionality of the outputs.
+        olog       : bool.  Determines if the target values are log10-scaled.
         x_mean     : array. Mean  values of the input  data.
         x_std      : array. Stdev values of the input  data.
         y_mean     : array. Mean  values of the output data.
@@ -88,8 +89,11 @@ class NNModel:
         y_max      : array. Maxima of the output data.
         scalelims  : list, floats. [min, max] of the scaled data range.
         ncores     : int. Number of cores to use for parallel data loading.
-        batch_size : int. Size of batches for training/validation/testing.
         buffer_size: int. Number of cases to pre-load in memory.
+        batch_size : int. Size of batches for training/validation/testing.
+        nbatches   : list, ints. Number of batches in the 
+                                 [training, validation, test] (in that order) 
+                                 sets.
         layers     : list, str.  Types of hidden layers.
         lay_params : list, ints. Parameters for the layer type 
                                  E.g., kernel size
@@ -136,54 +140,36 @@ class NNModel:
                                                 x_min,  x_max, y_min,  y_max, 
                                                 scalelims, shuffle)
         # Other variables
-        self.batch_size  = batch_size
+        self.inD  = xlen
+        self.outD = ylen
+        self.olog = olog
+
+        self.y_mean = y_mean
+        self.y_std  = y_std
+        self.y_min  = y_min
+        self.y_max  = y_max
+        self.scalelims = scalelims
+
+        self.batch_size    = batch_size
+        self.train_batches = nbatches[0]
+        self.valid_batches = nbatches[1]
+        self.test_batches  = nbatches[2]
+
         self.weight_file = weight_file
         self.stop_file   = stop_file
+
         self.lengthscale = lengthscale
         self.max_lr      = max_lr
         self.clr_mode    = clr_mode
         self.clr_steps   = clr_steps
-        # To ensure log(0) never happens
-        self.epsilon     = epsilon
-        self.train_flag  = train_flag
-        self.resume      = resume
+
+        self.epsilon    = epsilon # To ensure log(0) never happens
+
+        self.train_flag = train_flag
+        self.resume     = resume
+        self.shuffle    = shuffle
         
-        # Build model
-        '''
-        if convlayers is not None:
-            # Convolutional layers to mix inputs
-            if shuffle:
-                inp = Input(shape=(xlen,1), tensor=self.X)
-            else:
-                inp = Input(shape=(xlen,1))
-            x = inp
-            x = Convolution1D(nb_filter=convlayers[0], kernel_size=5, 
-                              activation='relu',      padding='same')(x)
-            #x = MaxPooling1D(pool_size=2)(x)
-            for jj in range(1, len(convlayers)):
-                x = Convolution1D(nb_filter=convlayers[jj], kernel_size=3, 
-                                  activation='relu',       padding='same')(x)
-                if jj == len(convlayers) - 1:
-                    x = MaxPooling1D(pool_size=2)(x)
-            x = Flatten()(x)
-        else:
-            # Dense net
-            if shuffle:
-                inp = Input(shape=(xlen,), tensor=self.X)
-            else:
-                inp = Input(shape=(xlen,))
-            x = inp
-
-        # Dense layers
-        x = Dense(denselayers[0], activation='relu')(x)
-        for jj in range(1, len(denselayers)):
-            x = Dense(denselayers[jj], activation='relu')(x)
-        out = Dense(ylen)(x)
-
-        self.model = Model(inp, out)
-
-        '''
-        # New model creation
+        ### Build model
         # Input layer
         if shuffle:
             inp = Input(shape=(xlen,), tensor=self.X)
@@ -195,7 +181,8 @@ class NNModel:
         for i in range(len(layers)):
             if layers[i] == 'conv1d':
                 tshape = tuple(val for val in K.int_shape(x) if val is not None)
-                x = Reshape(tshape + (1,))(x)
+                if i == 0 or (i > 0 and layers[i-1] != 'conv1d'):
+                    x = Reshape(tshape + (1,))(x)
                 x = Convolution1D(nb_filter=nodes[n], 
                                   kernel_size=lay_params[i], 
                                   activation=activations[n], 
@@ -207,7 +194,7 @@ class NNModel:
                         print('WARNING: Dense layer follows Conv1d layer. ' \
                               + 'Flattening.')
                         x = Flatten()(x)
-                x = Dense(nodes[n], activation=activations[n])(x)
+                x  = Dense(nodes[n], activation=activations[n])(x)
                 n += 1
             elif layers[i] == 'maxpool1d':
                 if layers[i-1] == 'dense' or layers[i-1] == 'flatten':
@@ -219,6 +206,9 @@ class NNModel:
                     raise Exception('AvgPool layers must follow Conv1d or ' \
                                     + 'Pool layer.')
                 x = AveragePooling1D(pool_size=lay_params[i])(x)
+            elif layers[i] == 'dropout':
+                if self.train_flag:
+                    x = Dropout(lay_params[i])(x)
             elif layers[i] == 'flatten':
                 x = Flatten()(x)
         # Output layer
@@ -250,16 +240,9 @@ class NNModel:
         patience   : If no model improvement after `patience` epochs, 
                      ends training.
         """
-        # ModelCheckpoint replaced with ModelCheckpointEnhanced, below
-        model_checkpoint = keras.callbacks.ModelCheckpoint(self.weight_file,
-                                        monitor='val_loss',
-                                        save_best_only=True,
-                                        save_weights_only=True,
-                                        mode='auto',
-                                        verbose=1)
-
         # Directory containing the save files
         savedir = '/'.join(self.weight_file.split('/')[:-1]) + '/'
+        fhistory = savedir + 'history.npz'
 
         # Resume properly, if requested
         if self.resume:
@@ -277,19 +260,24 @@ class NNModel:
                                 + 'of model weights.')
             else:
                 self.model.load_weights(self.weight_file)
-            sigpickle  = glob.glob(savedir + 'sig.epoch*.pickle')[-1]
-            sig        = pickle.load(open(sigpickle, "rb"))
-            init_epoch = int(sigpickle.split('.')[-2].strip('epoch'))
+            init_epoch = len(np.load(fhistory)['loss'])
         # Train a new model
         else:
-            # Handle Ctrl+C or STOP file to halt training
-            sig        = C.SignalStopping(stop_file=self.stop_file)
             init_epoch = 0
-        sig_savefile     = savedir + 'sig.epoch{epoch:04d}.pickle'
+
+        ### Callbacks
+        # Save the model weights
+        model_checkpoint = keras.callbacks.ModelCheckpoint(self.weight_file,
+                                        monitor='val_loss',
+                                        save_best_only=True,
+                                        save_weights_only=True,
+                                        mode='auto',
+                                        verbose=1)
+        # Handle Ctrl+C or STOP file to halt training
+        sig        = C.SignalStopping(stop_file=self.stop_file)
         # Cyclical learning rate
         clr        = C.CyclicLR(base_lr=self.lengthscale, max_lr=self.max_lr,
                                 step_size=self.clr_steps, mode=self.clr_mode)
-
         # Early stopping criteria
         Early_Stop = keras.callbacks.EarlyStopping(monitor='val_loss', 
                                                    min_delta=0, 
@@ -298,21 +286,17 @@ class NNModel:
         # Stop if NaN loss occurs
         Nan_Stop = keras.callbacks.TerminateOnNaN()
 
-        # Super-charged model saving & resuming training
-        #super_checkpoint = C.ModelCheckpointEnhanced(filepath=self.weight_file, 
-        #                        monitor='val_loss',
-        #                        save_best_only=True,
-        #                        mode='auto',
-        #                        verbose=1, 
-        #                        callbacks_to_save =[sig], 
-        #                        callbacks_filepath=[sig_savefile])
-
-
-        # Train the model
+        ### Train the model
         if self.train_flag:
             # Ensure at least 1 epoch happens when training
             if init_epoch >= epochs:
-                epochs = init_epoch + 1
+                print("The requested number of training epochs ({}) is less " +\
+                      "than the epochs that\nthe model has already been "     +\
+                      "trained for ({}).  The model has been loaded,\nbut "   +\
+                      "not trained any further.".format(str(epochs), 
+                                                        str(init_epochs)))
+                return
+            # Batch size is commented out because that is handled by TFRecords
             self.historyNN = self.model.fit(initial_epoch=init_epoch, 
                                              epochs=epochs, 
                                              steps_per_epoch=train_steps, 
@@ -325,7 +309,6 @@ class NNModel:
                                                         Nan_Stop, 
                                                         model_checkpoint])
             self.historyCLR = clr.history
-            fhistory = savedir + 'history.npz'
             if not os.path.exists(fhistory) or not self.resume:
                 np.savez(fhistory, loss=self.historyNN.history['loss'], 
                                val_loss=self.historyNN.history['val_loss'])
@@ -337,8 +320,81 @@ class NNModel:
                             self.historyNN.history['val_loss']))
                 np.savez(fhistory, loss=loss, val_loss=val_loss)
 
-
+        # Load best set of weights
         self.model.load_weights(self.weight_file)
+
+    def Yeval(self, mode, dataset, preddir, denorm=False):
+        """
+        Saves out .NPY files of the true or predicted Y values for a 
+        specified data set.
+
+        Inputs
+        ------
+        mode   : string. 'pred' or 'true'. Specifies whether to save the true 
+                         or predicted Y values of  `dataset`.
+        dataset: string. 'train', 'valid', or 'test'. Specifies the data set to 
+                         make predictions on.
+        preddir: string. Path/to/directory where predictions will be saved.
+        denorm : bool.   Determines whether to denormalize the predicted values.
+        """
+        if self.shuffle:
+            raise ValueError("This model has shuffled TFRecords.\nCreate a " +\
+                        "new NNModel object with shuffle=False and try again.")
+
+        if dataset == 'train':
+            X = self.X
+            Y = self.Y
+            num_batches = self.train_batches
+        elif dataset == 'valid':
+            X = self.Xval
+            Y = self.Yval
+            num_batches = self.valid_batches
+        elif dataset == 'test':
+            X = self.Xte
+            Y = self.Yte
+            num_batches = self.test_batches
+        else:
+            raise ValueError("Invalid specification for `dataset` parameter " +\
+                    "of NNModel.Yeval().\nAllowed options: 'train', 'valid'," +\
+                    " or 'test'\nPlease correct this and try again.")
+
+        # Prefix for the savefiles
+        if mode == 'pred' or mode=='true':
+            fname = ''.join([preddir, dataset, '/', mode])
+        else:
+            raise ValueError("Invalid specification for `mode` parameter of " +\
+                             "NNModel.Yeval().\nAllowed options: 'pred' or "  +\
+                             "'true'\nPlease correct this and try again.")
+
+        if denorm:
+            fname = ''.join([fname, '-denorm_'])
+        else:
+            fname = ''.join([fname, '-norm_'])
+
+        U.make_dir(preddir+dataset) # Ensure the directory exists
+
+        # Save out the Y values
+        y_batch = np.zeros((self.batch_size, self.outD))
+        for i in range(num_batches):
+            foo = ''.join([fname, str(i).zfill(len(str(num_batches))), '.npy'])
+            if mode == 'pred': # Predicted Y values
+                x_batch = K.eval(X)
+                y_batch = self.model.predict(x_batch)
+            else:  # True Y values
+                y_batch = K.eval(Y)
+            if denorm:
+                y_batch = U.denormalize(U.descale(y_batch, 
+                                                  self.y_min, self.y_max, 
+                                                  self.scalelims),
+                                        self.y_mean, self.y_std)
+                if self.olog:
+                    y_batch = 10**y_batch
+            np.save(foo, y_batch)
+            print(''.join(['  Batch ', str(i+1), '/', str(num_batches)]), end='\r')
+        print('')
+
+        return fname
+
 
 
 def driver(inputdir, outputdir, datadir, plotdir, preddir, 
@@ -353,7 +409,8 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
            lengthscale, max_lr, clr_mode, clr_steps, 
            epochs, patience, 
            weight_file, resume, 
-           plot_cases, xvals, xlabel, ylabel):
+           plot_cases, fxvals, xlabel, ylabel,
+           filters=None, filt2um=1.):
     """
     Driver function to handle model training and evaluation.
 
@@ -403,9 +460,15 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     weight_file: string. Path/to/file where NN weights are saved.
     resume     : bool.   Determines whether to resume training.
     plot_cases : list, ints. Cases from test set to plot.
-    xvals      : array.  X-axis values to correspond to predicted Y values.
+    fxvals     : string. Path/to/file of X-axis values to correspond to 
+                         predicted Y values.
     xlabel     : string. X-axis label for plotting.
     ylabel     : string. Y-axis label for plotting.
+    filters    : list, strings.  Paths/to/filter files.  Default: None
+                         If specified, will compute RMSE/R2 stats over the 
+                         integrated filter bandpasses.
+    filt2um    : float.  Conversion factor for filter file wavelengths to 
+                         microns.  Default: 1.0
     """
     # Get file names, calculate number of cases per file
     print('Loading files & calculating total number of batches...')
@@ -541,6 +604,9 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
         ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
 
+    # Load the xvals
+    xvals = np.load(fxvals)
+
     # Perform grid search
     if gridsearch:
         # Train a model for each architecture, w/ unique directories
@@ -551,13 +617,14 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                 maxlen = len(arch)
             archdir = os.path.join(outputdir, arch, '')
             wsplit  = weight_file.rsplit('/', 1)[1].rsplit('.', 1)
-            wfile   = archdir + wsplit[0] + '_' + arch + '.' + wsplit[1]
+            wfile   = ''.join([archdir, wsplit[0], '_', arch, '.', wsplit[1]])
             U.make_dir(archdir)
             nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                         inD, outD, 
+                         inD, outD, olog, 
                          x_mean, x_std, y_mean, y_std, 
                          x_min,  x_max, y_min,  y_max, scalelims, 
-                         ncores, batch_size, buffer_size, 
+                         ncores, buffer_size, batch_size, 
+                         [train_batches, valid_batches, test_batches], 
                          layers[i], lay_params[i], 
                          activations[i], act_params[i], nodes[i], 
                          lengthscale, max_lr, clr_mode, clr_steps, 
@@ -586,10 +653,11 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     if trainflag:
         print('\nBeginning model training.\n')
         nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                     inD, outD, 
+                     inD, outD, olog, 
                      x_mean, x_std, y_mean, y_std, 
                      x_min,  x_max, y_min,  y_max, scalelims, 
-                     ncores, batch_size, buffer_size, 
+                     ncores, buffer_size, batch_size, 
+                     [train_batches, valid_batches, test_batches], 
                      layers, lay_params, activations, act_params, nodes, 
                      lengthscale, max_lr, clr_mode, clr_steps, 
                      weight_file, stop_file='./STOP', 
@@ -600,77 +668,226 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
 
     # Call new model with shuffle=False
     nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                 inD, outD, 
+                 inD, outD, olog, 
                  x_mean, x_std, y_mean, y_std, 
                  x_min,  x_max, y_min,  y_max, scalelims, 
-                 ncores, batch_size, buffer_size, 
+                 ncores, buffer_size, batch_size, 
+                 [train_batches, valid_batches, test_batches], 
                  layers, lay_params, activations, act_params, nodes, 
                  lengthscale, max_lr, clr_mode, clr_steps, 
                  weight_file, stop_file='./STOP', 
                  train_flag=False, shuffle=False, resume=False)
     nn.model.load_weights(weight_file) # Load the model
     # Save in ONNX format
-    onnx_model = keras2onnx.convert_keras(nn.model)
-    onnx.save_model(onnx_model, nn.weight_file.rsplit('.', 1)[0] + '.onnx')
+    #onnx_model = keras2onnx.convert_keras(nn.model)
+    #onnx.save_model(onnx_model, nn.weight_file.rsplit('.', 1)[0] + '.onnx')
 
     # Validate model
     if (validflag or trainflag) and not rng_test:
         print('\nValidating the model...\n')
-        rmse_val  = S.rmse(nn, batch_size, valid_batches, outD,
-                           y_mean, y_std, y_min, y_max, scalelims, 
-                           preddir, mode='val')
-        rmse_mean = np.mean(rmse_val, 0)
-        print('Val RMSE     :', rmse_val)
-        print('Val Mean RMSE:', rmse_mean)
-        np.savez(outputdir+rmse_file+'_val.npz', 
-                 rmse=rmse_val, rmse_mean=rmse_mean)
+        # Y values
+        print('  Predicting...')
+        fvalpred = nn.Yeval('pred', 'valid', preddir, 
+                            denorm=(normalize==False and scale==False))
+        fvalpred = glob.glob(fvalpred + '*')
 
-        r2_val = S.r2(nn, batch_size, valid_batches, outD,
-                      y_mean, y_std, y_min, y_max, scalelims, 
-                      preddir, mode='val')
-        r2_mean = np.mean(r2_val, 0)
-        print('Val R2     :', r2_val)
-        print('Val Mean R2:', r2_mean)
-        np.savez(outputdir+r2_file+'_val.npz', 
-                 r2=r2_val, r2_mean=r2_mean)
+        print('  Loading the true Y values...')
+        fvaltrue = nn.Yeval('true', 'valid', preddir, 
+                            denorm=(normalize==False and scale==False))
+        fvaltrue = glob.glob(fvaltrue + '*')
+        ### RMSE & R2
+        print('\n Calculating RMSE & R2...')
+        if not normalize and not scale and not olog:
+            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, x_vals=xvals, 
+                                  filters=filters, filt2um=filt2um)
+        else:
+            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, 
+                                  y_std, y_min, y_max, scalelims, olog, 
+                                  x_vals=xvals, 
+                                  filters=filters, filt2um=filt2um)
+        # RMSE
+        if np.any(val_stats[0] != -1) and np.any(val_stats[1] != -1):
+            print('  Normalized RMSE       : ', val_stats[0])
+            print('  Mean normalized RMSE  : ', np.mean(val_stats[0]))
+            print('  Denormalized RMSE     : ', val_stats[1])
+            print('  Mean denormalized RMSE: ', np.mean(val_stats[1]))
+            np.savez(outputdir+rmse_file+'_val_norm.npz', 
+                     rmse=val_stats[0], rmse_mean=np.mean(val_stats[0]))
+            saveRMSEnorm   = True
+            saveRMSEdenorm = True
+        elif np.any(val_stats[0] != -1):
+            print('  RMSE     : ', val_stats[0])
+            print('  Mean RMSE: ', np.mean(val_stats[0]))
+            saveRMSEnorm   = True
+            saveRMSEdenorm = False
+        elif np.any(val_stats[1] != -1):
+            print('  RMSE     : ', val_stats[1])
+            print('  Mean RMSE: ', np.mean(val_stats[1]))
+            saveRMSEnorm   = False
+            saveRMSEdenorm = True
+        else:
+            print("  No files passed in to compute RMSE.")
+            saveRMSEnorm   = False
+            saveRMSEdenorm = False
+        if saveRMSEnorm:
+            P.plot(''.join([plotdir, rmse_file, '_val_norm.png']), 
+                   xvals, val_stats[0], xlabel, 'RMSE')
+            np.savez(outputdir+rmse_file+'_val_norm.npz', 
+                     rmse=val_stats[0], rmse_mean=np.mean(val_stats[0]))
+        if saveRMSEdenorm:
+            P.plot(''.join([plotdir, rmse_file, '_val_denorm.png']), 
+                   xvals, val_stats[1], xlabel, 'RMSE')
+            np.savez(outputdir+rmse_file+'_val_denorm.npz', 
+                     rmse=val_stats[1], rmse_mean=np.mean(val_stats[1]))
+        # R2
+        if np.any(val_stats[2] != -1) and np.any(val_stats[3] != -1):
+            print('  Normalized R2       : ', val_stats[2])
+            print('  Mean normalized R2  : ', np.mean(val_stats[2]))
+            print('  Denormalized R2     : ', val_stats[3])
+            print('  Mean denormalized R2: ', np.mean(val_stats[3]))
+            saveR2norm   = True
+            saveR2denorm = True
+        elif np.any(val_stats[2] != -1):
+            print('  R2     : ', val_stats[2])
+            print('  Mean R2: ', np.mean(val_stats[2]))
+            saveR2norm   = True
+            saveR2denorm = False
+        elif np.any(val_stats[3] != -1):
+            print('  R2     : ', val_stats[3])
+            print('  Mean R2: ', np.mean(val_stats[3]))
+            saveR2norm   = False
+            saveR2denorm = True
+        else:
+            print("  No files passed in to compute R2.")
+            saveR2norm   = False
+            saveR2denorm = False
+        if saveR2norm:
+            P.plot(''.join([plotdir, r2_file, '_val_norm.png']), 
+                   xvals, val_stats[2], xlabel, '$R^2$')
+            np.savez(outputdir+r2_file+'_val_norm.npz', 
+                     r2=val_stats[2], r2_mean=np.mean(val_stats[2]))
+        if saveR2denorm:
+            P.plot(''.join([plotdir, r2_file, '_val_denorm.png']), 
+                   xvals, val_stats[3], xlabel, '$R^2$')
+            np.savez(outputdir+r2_file+'_val_denorm.npz', 
+                     r2=val_stats[3], r2_mean=np.mean(val_stats[3]))
 
     # Evaluate model on test set
     if testflag and not rng_test:
         print('\nTesting the model...\n')
-        rmse_test  = S.rmse(nn, batch_size, test_batches, outD,
-                            y_mean, y_std, y_min, y_max, scalelims, 
-                            preddir, mode='test')
-        rmse_mean = np.mean(rmse_test, 0)
-        print('Test RMSE     :', rmse_test)
-        print('Test Mean RMSE:', rmse_mean)
-        np.savez(outputdir+rmse_file+'_test.npz', 
-                 rmse=rmse_test, rmse_mean=rmse_mean)
+        # Y values
+        print('  Predicting...')
+        ftestpred = nn.Yeval('pred', 'test', preddir, 
+                             denorm=(normalize==False and scale==False))
+        ftestpred = glob.glob(ftestpred + '*')
 
+        print('  Loading the true Y values...')
+        ftesttrue = nn.Yeval('true', 'test', preddir, 
+                             denorm=(normalize==False and scale==False))
+        ftesttrue = glob.glob(ftesttrue + '*')
+        ### RMSE & R2
+        print('\n Calculating RMSE & R2...')
+        if not normalize and not scale and not olog:
+            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, x_vals=xvals, 
+                                  filters=filters, filt2um=filt2um)
+        else:
+            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, 
+                                   y_std, y_min, y_max, scalelims, olog, 
+                                  x_vals=xvals, 
+                                  filters=filters, filt2um=filt2um)
+        # RMSE
+        if np.any(test_stats[0] != -1) and np.any(test_stats[1] != -1):
+            print('  Normalized RMSE       : ', test_stats[0])
+            print('  Mean normalized RMSE  : ', np.mean(test_stats[0]))
+            print('  Denormalized RMSE     : ', test_stats[1])
+            print('  Mean denormalized RMSE: ', np.mean(test_stats[1]))
+            np.savez(outputdir+rmse_file+'_val_norm.npz', 
+                     rmse=test_stats[0], rmse_mean=np.mean(test_stats[0]))
+            saveRMSEnorm   = True
+            saveRMSEdenorm = True
+        elif np.any(test_stats[0] != -1):
+            print('  RMSE     : ', test_stats[0])
+            print('  Mean RMSE: ', np.mean(test_stats[0]))
+            saveRMSEnorm   = True
+            saveRMSEdenorm = False
+        elif np.any(test_stats[1] != -1):
+            print('  RMSE     : ', test_stats[1])
+            print('  Mean RMSE: ', np.mean(test_stats[1]))
+            saveRMSEnorm   = False
+            saveRMSEdenorm = True
+        else:
+            print("  No files passed in to compute RMSE.")
+            saveRMSEnorm   = False
+            saveRMSEdenorm = False
+        if saveRMSEnorm:
+            P.plot(''.join([plotdir, rmse_file, '_test_norm.png']), 
+                   xvals, test_stats[0], xlabel, 'RMSE')
+            np.savez(outputdir+rmse_file+'_test_norm.npz', 
+                     rmse=test_stats[0], rmse_mean=np.mean(test_stats[0]))
+        if saveRMSEdenorm:
+            P.plot(''.join([plotdir, rmse_file, '_test_denorm.png']), 
+                   xvals, test_stats[1], xlabel, 'RMSE')
+            np.savez(outputdir+rmse_file+'_test_denorm.npz', 
+                     rmse=test_stats[1], rmse_mean=np.mean(test_stats[1]))
         # R2
-        r2_test = S.r2(nn, batch_size, test_batches, outD,
-                       y_mean, y_std, y_min, y_max, scalelims, 
-                       preddir, mode='test')
-        r2_mean = np.mean(r2_test, 0)
-        print('Test R2     :', r2_test)
-        print('Test Mean R2:', r2_mean)
-        np.savez(outputdir+r2_file+'_test.npz', 
-                 r2=r2_test, r2_mean=r2_mean)
+        if np.any(test_stats[2] != -1) and np.any(test_stats[3] != -1):
+            print('  Normalized R2       : ', test_stats[2])
+            print('  Mean normalized R2  : ', np.mean(test_stats[2]))
+            print('  Denormalized R2     : ', test_stats[3])
+            print('  Mean denormalized R2: ', np.mean(test_stats[3]))
+            saveR2norm   = True
+            saveR2denorm = True
+        elif np.any(test_stats[2] != -1):
+            print('  R2     : ', test_stats[2])
+            print('  Mean R2: ', np.mean(test_stats[2]))
+            saveR2norm   = True
+            saveR2denorm = False
+        elif np.any(test_stats[3] != -1):
+            print('  R2     : ', test_stats[3])
+            print('  Mean R2: ', np.mean(test_stats[3]))
+            saveR2norm   = False
+            saveR2denorm = True
+        else:
+            print("  No files passed in to compute R2.")
+            saveR2norm   = False
+            saveR2denorm = False
+        if saveR2norm:
+            P.plot(''.join([plotdir, r2_file, '_test_norm.png']), 
+                   xvals, test_stats[2], xlabel, '$R^2$')
+            np.savez(outputdir+r2_file+'_test_norm.npz', 
+                     r2=test_stats[2], r2_mean=np.mean(test_stats[2]))
+        if saveR2denorm:
+            P.plot(''.join([plotdir, r2_file, '_test_denorm.png']), 
+                   xvals, test_stats[3], xlabel, '$R^2$')
+            np.savez(outputdir+r2_file+'_test_denorm.npz', 
+                     r2=test_stats[3], r2_mean=np.mean(test_stats[3]))
 
     # Plot requested cases
-    predfoo = sorted(glob.glob(preddir+'test/testpred*'))
-    truefoo = sorted(glob.glob(preddir+'test/testtrue*'))
-    if len(predfoo) > 0 and len(truefoo) > 0:
-        for val in plot_cases:
-            fname    = plotdir + 'spec' + str(val) + '_pred-vs-true.png'
-            predspec = np.load(predfoo[val // batch_size])[val % batch_size]
-            predspec = U.denormalize(U.descale(predspec, 
-                                               y_min, y_max, scalelims),
-                                     y_mean, y_std)
-            truespec = np.load(truefoo[val // batch_size])[val % batch_size]
-            truespec = U.denormalize(U.descale(truespec, 
-                                               y_min, y_max, scalelims),
-                                     y_mean, y_std)
-            P.plot_spec(fname, predspec, truespec, xvals, xlabel, ylabel, olog)
+    if not rng_test:
+        predfoo = sorted(glob.glob(preddir+'test/pred*'))
+        truefoo = sorted(glob.glob(preddir+'test/true*'))
+        if len(predfoo) > 0 and len(truefoo) > 0:
+            print("\nPlotting the requested cases...")
+            nplot = 0
+            for v in plot_cases:
+                fname    = plotdir + 'spec' + str(v) + '_pred-vs-true.png'
+                predspec = np.load(predfoo[v // batch_size])[v % batch_size]
+                predspec = U.denormalize(U.descale(predspec, 
+                                                   y_min, y_max, scalelims),
+                                         y_mean, y_std)
+                truespec = np.load(truefoo[v // batch_size])[v % batch_size]
+                truespec = U.denormalize(U.descale(truespec, 
+                                                   y_min, y_max, scalelims),
+                                         y_mean, y_std)
+                if olog:
+                    predspec = 10**predspec
+                    truespec = 10**truespec
+                P.plot_spec(fname, predspec, truespec, xvals, xlabel, ylabel)
+                nplot += 1
+                print("  Plot " + str(nplot) + "/" + str(len(plot_cases)), end='\r')
+            print("")
+        else:
+            raise Exception("No predictions found in " + preddir + "test/.")
 
     return
 

@@ -55,7 +55,7 @@ def resume_save(fname):
         plt.savefig(resfoo, bbox_inches='tight')
 
 
-def loss(nn, plotdir, fname='history_train_val_loss.png'):
+def loss(nn, plotdir, fname='history_train_val_loss.png', resume=False):
     """
     Plots the loss.
 
@@ -77,8 +77,10 @@ def loss(nn, plotdir, fname='history_train_val_loss.png'):
 
     plt.figure()
     plt.title('Model Loss History')
-    plt.plot(tr_loss,  label='train')
-    plt.plot(val_loss, label='val')
+    # Training loss is at 1/2 the epoch, 
+    # while val loss is at the end of the epoch
+    plt.plot(np.arange(len(tr_loss ))+0.5, tr_loss,  label='train')
+    plt.plot(np.arange(len(val_loss))+1.0, val_loss, label='val')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
@@ -97,14 +99,18 @@ def loss(nn, plotdir, fname='history_train_val_loss.png'):
         plt.semilogx(clr_lr, clr_loss)
     plt.xlabel("Learning rate")
     plt.ylabel("Loss")
-    resume_save(plotdir+fname.replace('train_val_loss', 'clr_loss'))
-    #plt.savefig(plotdir+fname.replace('train_val_loss', 'clr_loss'), 
-    #            bbox_inches='tight')
+    pname = plotdir+fname.replace('train_val_loss', 'clr_loss')
+    if resume:
+        resume_save(pname)
+    else:
+        plt.savefig(pname, bbox_inches='tight')
     plt.ylim(np.nanmin(val_loss), 
              np.nanmin(val_loss)+np.abs(np.nanmin(val_loss)*0.5))
-    resume_save(plotdir+fname.replace('train_val_loss', 'clr_loss_zoom'))
-    #plt.savefig(plotdir+fname.replace('train_val_loss', 'clr_loss_zoom'), 
-    #            bbox_inches='tight')
+    pname_zoom = plotdir+fname.replace('train_val_loss', 'clr_loss_zoom')
+    if resume:
+        resume_save(pname_zoom)
+    else:
+        plt.savefig(pname_zoom, bbox_inches='tight')
     plt.close()
 
 
@@ -168,7 +174,7 @@ def pred_vs_true(fpred_mean, fy_test_un,
 
 
 def plot_spec(fname, predspec, truespec=None, 
-              xvals=None, xlabel=None, ylabel=None, olog=False):
+              xvals=None, xlabel=None, ylabel=None):
     """
     Plots the predicted spectrum, vs the known spectrum if supplied.
     """
@@ -179,9 +185,6 @@ def plot_spec(fname, predspec, truespec=None,
         xlabel  = 'Parameter #'
     if ylabel is None:
         ylabel  = 'Predicted Value'
-    if olog:
-        predspec = 10**predspec
-        truespec = 10**truespec
     if truespec is None:
         trans = 1.0
     else:
@@ -204,7 +207,7 @@ def plot_spec(fname, predspec, truespec=None,
             lgdobj.set_linewidth(2.0)
         frame1.set_xticklabels([])
         frame2 = fig1.add_axes((.1, .1, .8, .2))
-        resid       = 100 * (predspec   - truespec)   / truespec
+        resid       = 100 * (predspec   - truespec  ) / truespec
         residsmooth = 100 * (predsmooth - truesmooth) / truesmooth
         plt.scatter(xvals, resid, s=0.4, 
                  alpha=0.7, label='Full resolution', c='b')
@@ -217,15 +220,45 @@ def plot_spec(fname, predspec, truespec=None,
         yticks = frame2.yaxis.get_major_ticks()
         yticks[-1].label1.set_visible(False)
         plt.ylabel('Residuals (%)', fontsize=12)
+        ylims = plt.ylim()
 
     plt.xlabel(u''+xlabel, fontsize=12)
-    plt.savefig(fname, bbox_inches='tight', dpi=600)
 
-    frame3 = fig1.add_axes((0.9, .1, .1, .2))
-    plt.hist(resid, bins=60, density=True, orientation="horizontal")
-    plt.xlabel('PDF', fontsize=12)
-    plt.yticks(visible=False)
-    plt.setp(frame3.get_xticklabels()[0], visible=False)
-    plt.savefig(fname.replace('.png', '_resid-hist.png'), bbox_inches='tight', dpi=600)
+    if truespec is not None:
+        frame3 = fig1.add_axes((0.9, .1, .1, .2))
+        plt.hist(resid[np.abs(resid)!=np.inf], bins=60, density=True, 
+                 orientation="horizontal")
+        plt.xlabel('PDF', fontsize=12)
+        plt.ylim(*ylims)
+        plt.yticks(visible=False)
+        plt.setp(frame3.get_xticklabels()[0], visible=False)
+
+    plt.savefig(fname, bbox_inches='tight', dpi=600)
     plt.close()
+
+
+def plot(fname, xvals, yvals, xlabel, ylabel):
+    """
+    Plots y vs. x values.
+
+    Inputs
+    ------
+    fname: string. Path/to/plot to save.
+    xvals: array.  X-axis values.  If None, uses simple range.
+    yvals: array.  Y-axis values.
+    xlabel: string. X-axis label.
+    ylabel: string. Y-axis label.
+
+    Outputs
+    -------
+    Plot of the supplied data, saved as `fname`.
+    """
+    if xvals is None:
+        xvals = np.arange(len(yvals), dtype=int)
+    plt.plot(xvals, yvals)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.savefig(fname)
+    plt.close()
+
 
