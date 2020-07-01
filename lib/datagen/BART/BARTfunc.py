@@ -16,17 +16,19 @@ import scipy.constants   as sc
 import scipy.interpolate as si
 from mpi4py import MPI
 
+BARTdir = os.path.dirname(os.path.realpath(__file__))+'/../../../modules/BART/'
+sys.path.append(BARTdir+'code/')
+
 import makeatm   as mat
 import PT        as pt
 import wine      as w
 import reader    as rd
 import constants as c
 
-BARTdir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(BARTdir + "/../modules/MCcubed/")
+sys.path.append(BARTdir + "modules/MCcubed/")
 import MCcubed.utils as mu
 
-sys.path.append(BARTdir + "/../modules/transit/transit/python")
+sys.path.append(BARTdir + "modules/transit/transit/python")
 import transit_module as trm
 
 
@@ -90,6 +92,11 @@ def main(comm):
                      help="Internal temperature of the planet [default: "
                      "%(default)s].",
                      dest="tint",    type=float,  default=100.0)
+  group.add_argument("--tint_type", dest="tint_type",
+           help="Method to evaluate `tint`. Options: const or thorngren. " + \
+                "[default: %(default)s].",
+           type=str,   action="store", default='const', 
+           choices=("const","thorngren"))
   # transit Options:
   group = parser.add_argument_group("transit Options")
   group.add_argument("--config",  action="store",
@@ -97,9 +104,6 @@ def main(comm):
                      dest="config", type=str,    default=None)
   # Output-Converter Options:
   group = parser.add_argument_group("Output Converter Options")
-  group.add_argument("--filters",                action="store",
-                     help="Waveband filter name [default: %(default)s]",
-                     dest="filters",  type=mu.parray, default=None)
   group.add_argument("--tep_name",          action="store",
                      help="A TEP file [default: %(default)s]",
                      dest="tep_name", type=str,    default=None)
@@ -124,16 +128,17 @@ def main(comm):
   npars, niter = array1
 
   # :::::::  Initialize the Input converter ::::::::::::::::::::::::::
-  atmfile  = args2.atmfile
-  molfit   = args2.molfit
-  PTtype   = args2.PTtype
-  params   = args2.params
-  tepfile  = args2.tep_name
-  tint     = args2.tint
-  Tmin     = args2.Tmin
-  Tmax     = args2.Tmax
-  solution = args2.solution  # Solution type
-  walk     = args2.walk
+  atmfile   = args2.atmfile
+  molfit    = args2.molfit
+  PTtype    = args2.PTtype
+  params    = args2.params
+  tepfile   = args2.tep_name
+  tint      = args2.tint
+  tint_type = args2.tint_type
+  Tmin      = args2.Tmin
+  Tmax      = args2.Tmax
+  solution  = args2.solution  # Solution type
+  walk      = args2.walk
 
   # Dictionary of functions to calculate temperature for PTtype
   PTfunc = {'iso'         : pt.PT_iso,
@@ -147,18 +152,19 @@ def main(comm):
   tstar = float(tep.getvalue('Ts')[0])
   # Stellar radius (in meters):
   rstar = float(tep.getvalue('Rs')[0]) * c.Rsun
-  # Semi-major axis (in meters):
-  sma   = float(tep.getvalue( 'a')[0]) * sc.au
-  # Planetary radius (in meters):
-  rplanet = float(tep.getvalue('Rp')[0]) * c.Rjup
-  # Planetary mass (in kg):
-  mplanet = float(tep.getvalue('Mp')[0]) * c.Mjup
 
   # Number of fitting parameters:
   nfree   = len(params)                 # Total number of free parameters
   nmolfit = len(molfit)                 # Number of molecular free parameters
-  nradfit = int(solution == 'transit')  # 1 for transit, 0 for eclipse
-  nPT     = nfree - nmolfit - nradfit   # Number of PT free parameters
+  nparfit = 3  # Radius, mass, SMA are free params
+  nPT     = nfree - nmolfit - nparfit   # Number of PT free parameters
+
+  # Planetary radius (in meters):
+  rplanet = params[nPT] * 1000. # km --> m
+  # Planetary mass (in kg):
+  mplanet = params[nPT+1] * c.Mjup
+  # Semi-major axis (in meters):
+  sma     = params[nPT+2] * sc.au
 
   # Read atmospheric file to get data arrays:
   species, pressure, temp, abundances = mat.readatm(atmfile)
@@ -187,7 +193,7 @@ def main(comm):
     # Planetary surface gravity (in cm s-2):
     gplanet = 100.0 * sc.G * mplanet / rplanet**2
     # Additional PT arguments:
-    PTargs  = [rstar, tstar, tint, sma, gplanet]
+    PTargs  = [rstar, tstar, tint, sma, gplanet, tint_type]
   else:
     PTargs  = None
 
@@ -216,7 +222,6 @@ def main(comm):
   specwn = trm.get_waveno_arr(nwave)
 
   # :::::::  Output Converter  :::::::::::::::::::::::::::::::::::::::
-  ffile    = args2.filters    # Filter files
   kurucz   = args2.kurucz     # Kurucz file
 
   # Log10(stellar gravity)
@@ -224,39 +229,9 @@ def main(comm):
   # Planet-to-star radius ratio:
   rprs  = rplanet / rstar
 
-  nfilters = len(ffile)  # Number of filters:
-
-  if walk != 'unif':
-    # FINDME: Separate filter/stellar interpolation?
-    # Get stellar model:
-    starfl, starwn, tmodel, gmodel = w.readkurucz(kurucz, tstar, gstar)
-    # Read and resample the filters:
-    nifilter  = [] # Normalized interpolated filter
-    istarfl   = [] # interpolated stellar flux
-    wnindices = [] # wavenumber indices used in interpolation
-    for i in np.arange(nfilters):
-      # Read filter:
-      filtwaven, filttransm = w.readfilter(ffile[i])
-      # Check that filter boundaries lie within the spectrum wn range:
-      if filtwaven[0] < specwn[0] or filtwaven[-1] > specwn[-1]:
-        mu.exit(message="Wavenumber array ({:.2f} - {:.2f} cm-1) does not "
-                "cover the filter[{:d}] wavenumber range ({:.2f} - {:.2f} "
-                "cm-1).".format(specwn[0], specwn[-1], i, filtwaven[0],
-                                                          filtwaven[-1]))
-
-      # Resample filter and stellar spectrum:
-      nifilt, strfl, wnind = w.resample(specwn, filtwaven, filttransm,
-                                        starwn, starfl)
-      nifilter.append(nifilt)
-      istarfl.append(strfl)
-      wnindices.append(wnind)
-
   # Allocate arrays for receiving and sending data to master:
   spectrum = np.zeros(nwave, dtype='d')
-  if walk == 'unif':
-    bandflux = np.zeros(nwave,    dtype='d')
-  else:
-    bandflux = np.zeros(nfilters, dtype='d')
+  bandflux = np.zeros(nwave, dtype='d')
 
   # Allocate array to receive parameters from MPI:
   params = np.zeros(npars, np.double)
@@ -273,6 +248,16 @@ def main(comm):
     if params[0] == np.inf:
       break
 
+    if PTtype == "line":
+      # Update PTargs
+      rplanet = params[nPT]   * 1000.  # km   --> m
+      mplanet = params[nPT+1] * c.Mjup # Mjup --> kg
+      sma     = params[nPT+2] * sc.au  # AU   --> m
+      # Planetary surface gravity (in cm s-2):
+      gplanet = 100.0 * sc.G * mplanet / rplanet**2
+      # Additional PT arguments:
+      PTargs  = [rstar, tstar, tint, sma, gplanet, tint_type]
+
     # Input converter calculate the profiles:
     try:
       tprofile[:] = pt.PT_generator(pressure,       params[0:nPT], 
@@ -283,53 +268,30 @@ def main(comm):
 
     # If the temperature goes out of bounds:
     if np.any(tprofile < Tmin) or np.any(tprofile > Tmax):
-      if walk == 'unif':
-        mu.comm_gather(comm, -np.ones(nwave), MPI.DOUBLE)
-      else:
-        mu.comm_gather(comm, -np.ones(nfilters), MPI.DOUBLE)
+      mu.comm_gather(comm, -np.ones(nwave), MPI.DOUBLE)
       continue
     # Scale abundance profiles:
     for i in np.arange(nmolfit):
       m = imol[i]
       # Use variable as the log10:
-      aprofiles[m] = abundances[:, m] * 10.0**params[nPT+nradfit+i]
+      aprofiles[m] = abundances[:, m] * 10.0**params[nPT+nparfit+i]
 
     # Update H2, He abundances so sum(abundances) = 1.0 in each layer:
     q = 1.0 - np.sum(aprofiles[imetals], axis=0)
     if np.any(q < 0.0):
-      if walk == 'unif':
-        mu.comm_gather(comm, -np.ones(nwave), MPI.DOUBLE)
-      else:
-        mu.comm_gather(comm, -np.ones(nfilters), MPI.DOUBLE)
+      mu.comm_gather(comm, -np.ones(nwave), MPI.DOUBLE)
       continue
     aprofiles[iH2] = ratio * q / (1.0 + ratio)
     aprofiles[iHe] =         q / (1.0 + ratio)
 
     # Set the 'surface' level:
-    if solution == "transit":
-      trm.set_radius(params[nPT])
+    trm.set_radius(params[nPT])
 
     # Let transit calculate the model spectrum:
     spectrum = trm.run_transit(profiles.flatten(), nwave)
 
-    # Calculate the band-integrated intensity per filter:
-    if walk != 'unif':
-      for i in np.arange(nfilters):
-        if   solution == "eclipse":
-          fluxrat = (spectrum[wnindices[i]]/istarfl[i]) * rprs*rprs
-          bandflux[i] = w.bandintegrate(fluxrat, specwn,
-                                        nifilter[i], wnindices[i])
-        elif solution == "transit":
-          bandflux[i] = w.bandintegrate(spectrum[wnindices[i]], specwn,
-                                        nifilter[i], wnindices[i])
-    else:
-      #sinterp  = si.interp1d(starwn, starfl)
-      #rstarfl  = sinterp(specwn)
-      #bandflux = (spectrum / rstarfl) * rprs * rprs
-      bandflux = spectrum
-
     # Send results back to MCMC:
-    mu.comm_gather(comm, bandflux, MPI.DOUBLE)
+    mu.comm_gather(comm, spectrum, MPI.DOUBLE)
 
   # ::::::  End main Loop  :::::::::::::::::::::::::::::::::::::::::::
   # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
