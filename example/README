@@ -56,7 +56,7 @@ Next, create the TLI file for BART:
   ../modules/BART/modules/transit/pylineread/src/pylineread.py -c pyline.cfg
 
 Finally, execute MARGE:
-  ../MARGE.py example.cfg
+  ../MARGE.py MARGE.cfg
 
 It will build the opacity table, generate the data, process it, and then 
 train a dense neural network model.  This will take some time.
@@ -70,8 +70,8 @@ BART.cfg -- BART configuration file.  See the BART User Manual for details.
 CIA_HITRAN_H2He_0200-9900K_0.5-500um.dat -- H2-He collision-induced absorption
                                             file.
 
-example.cfg -- MARGE configuration file.  See the supplied user manual or 
-               readme for details.
+MARGE.cfg -- MARGE configuration file.  See the supplied user manual or 
+             readme for details.
 
 hd189733b-fp00k2odfnew.pck -- Kurucz stellar model file.
 
