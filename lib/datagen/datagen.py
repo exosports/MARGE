@@ -15,7 +15,7 @@ import numpy as np
 import scipy.constants as sc
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + \
-                '/../modules/BART/code/')
+                '/../../modules/BART/code/')
 import constants as const
 
 
@@ -24,7 +24,7 @@ def generate_data(cfile, data_dir=None):
     Handles data generation according to specified parameters.
     """
     out = subprocess.run([os.path.dirname(os.path.abspath(__file__)) \
-                          + '/../modules/BART/BART.py', '-c', cfile] )
+                          + '/../../modules/BART/BART.py', '-c', cfile] )
     return
 
 
