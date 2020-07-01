@@ -36,11 +36,9 @@ from keras import initializers
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 
-#import onnx
-#import keras2onnx
-#from   onnx2keras import onnx_to_keras
-
-import GPyOpt
+import onnx
+import keras2onnx
+from   onnx2keras import onnx_to_keras
 
 import callbacks as C
 import loader    as L
@@ -182,11 +180,20 @@ class NNModel:
             if layers[i] == 'conv1d':
                 tshape = tuple(val for val in K.int_shape(x) if val is not None)
                 if i == 0 or (i > 0 and layers[i-1] != 'conv1d'):
+                    # Add channel for convolution
                     x = Reshape(tshape + (1,))(x)
-                x = Convolution1D(nb_filter=nodes[n], 
-                                  kernel_size=lay_params[i], 
-                                  activation=activations[n], 
-                                  padding='same')(x)
+                if type(activations[n]) == str:
+                    # Simple activation: pass as layer parameter
+                    x = Convolution1D(nb_filter=nodes[n], 
+                                      kernel_size=lay_params[i], 
+                                      activation=activations[n], 
+                                      padding='same')(x)
+                else:
+                    # Advanced activation: use as its own layer
+                    x = Convolution1D(nb_filter=nodes[n], 
+                                      kernel_size=lay_params[i], 
+                                      padding='same')(x)
+                    x = activations[n](x)
                 n += 1
             elif layers[i] == 'dense':
                 if i > 0:
@@ -194,7 +201,11 @@ class NNModel:
                         print('WARNING: Dense layer follows Conv1d layer. ' \
                               + 'Flattening.')
                         x = Flatten()(x)
-                x  = Dense(nodes[n], activation=activations[n])(x)
+                if type(activations[n]) == str:
+                    x = Dense(nodes[n], activation=activations[n])(x)
+                else:
+                    x = Dense(nodes[n])(x)
+                    x = activations[n] (x)
                 n += 1
             elif layers[i] == 'maxpool1d':
                 if layers[i-1] == 'dense' or layers[i-1] == 'flatten':
@@ -255,9 +266,8 @@ class NNModel:
                 #                   loss=keras.losses.mean_squared_error, 
                 #                   target_tensors=[self.Y])
                 #self.weight_file = self.weight_file.replace('.onnx', '.h5')
-                raise Exception('Resuming training for .onnx models is not '   \
-                                + 'yet available. Please specify a\n.h5 file ' \
-                                + 'of model weights.')
+                raise Exception('Resuming training for .onnx models is not '  \
+                                + 'yet available. Please specify a\n.h5 file.')
             else:
                 self.model.load_weights(self.weight_file)
             init_epoch = len(np.load(fhistory)['loss'])
@@ -270,7 +280,7 @@ class NNModel:
         model_checkpoint = keras.callbacks.ModelCheckpoint(self.weight_file,
                                         monitor='val_loss',
                                         save_best_only=True,
-                                        save_weights_only=True,
+                                        save_weights_only=False,
                                         mode='auto',
                                         verbose=1)
         # Handle Ctrl+C or STOP file to halt training
@@ -308,6 +318,7 @@ class NNModel:
                                              callbacks=[clr, sig, Early_Stop, 
                                                         Nan_Stop, 
                                                         model_checkpoint])
+            # Save out the history
             self.historyCLR = clr.history
             if not os.path.exists(fhistory) or not self.resume:
                 np.savez(fhistory, loss=self.historyNN.history['loss'], 
@@ -528,13 +539,25 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         # Slice desired indices
         x_mean, y_mean = mean [:inD], mean [inD:]
         x_std,  y_std  = stdev[:inD], stdev[inD:]
-        # Memory cleanup -- no longer need mean/stdev arrays
+        # Memory cleanup -- no longer need full mean/stdev arrays
         del mean, stdev
     else:
         x_mean = 0.
         x_std  = 1.
         y_mean = 0.
         y_std  = 1.
+
+    if olog:
+        # To properly calculate RMSE & R2 for log-scaled output
+        try:
+            y_mean_delog = np.load(inputdir + 
+                                   fmean.replace(".npy", "_delog.npy"))
+        except:
+            mean_delog = S.mean_stdev(ftrain, inD, ilog, False)[0]
+            y_mean_delog = mean_delog[inD:]
+            np.save(inputdir + fmean.replace(".npy", "_delog.npy"), y_mean_delog)
+    else:
+        y_mean_delog = y_mean
 
     # Get min/max values for scaling
     if scale:
@@ -697,14 +720,16 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         fvaltrue = glob.glob(fvaltrue + '*')
         ### RMSE & R2
         print('\n Calculating RMSE & R2...')
-        if not normalize and not scale and not olog:
-            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, x_vals=xvals, 
+        if not normalize and not scale:
+            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, 
+                                  olog=olog, y_mean_delog=y_mean_delog, 
+                                  x_vals=xvals, 
                                   filters=filters, filt2um=filt2um)
         else:
             val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, 
-                                  y_std, y_min, y_max, scalelims, olog, 
-                                  x_vals=xvals, 
-                                  filters=filters, filt2um=filt2um)
+                                  y_std, y_min, y_max, scalelims, 
+                                  olog, y_mean_delog, 
+                                  xvals, filters, filt2um)
         # RMSE
         if np.any(val_stats[0] != -1) and np.any(val_stats[1] != -1):
             print('  Normalized RMSE       : ', val_stats[0])
@@ -787,14 +812,16 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         ftesttrue = glob.glob(ftesttrue + '*')
         ### RMSE & R2
         print('\n Calculating RMSE & R2...')
-        if not normalize and not scale and not olog:
-            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, x_vals=xvals, 
-                                  filters=filters, filt2um=filt2um)
+        if not normalize and not scale:
+            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, 
+                                   olog=olog, y_mean_delog=y_mean_delog, 
+                                   x_vals=xvals, 
+                                   filters=filters, filt2um=filt2um)
         else:
             test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, 
-                                   y_std, y_min, y_max, scalelims, olog, 
-                                  x_vals=xvals, 
-                                  filters=filters, filt2um=filt2um)
+                                   y_std, y_min, y_max, scalelims, 
+                                   olog, y_mean_delog, 
+                                   xvals, filters, filt2um)
         # RMSE
         if np.any(test_stats[0] != -1) and np.any(test_stats[1] != -1):
             print('  Normalized RMSE       : ', test_stats[0])

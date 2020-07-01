@@ -201,12 +201,10 @@ def rmse_r2(fpred, ftrue, y_mean,
 
     # Variables for computing RMSE & R2
     n    = 0 # number of cases seen
-    sqer = 0 # squared error
     mss  = 0 # Model sum of squares
     tss  = 0 # True  sum of squares
-    rss  = 0 # Residual sum of squares
+    rss  = 0 # Residual sum of squares -- squared error
     if denorm:
-        sqer_denorm = 0 # The above, for denormalized values
         mss_denorm  = 0
         tss_denorm  = 0
         rss_denorm  = 0
@@ -218,11 +216,10 @@ def rmse_r2(fpred, ftrue, y_mean,
         """
         Computes squared differences for RMSE/R2 calculations.
         """
-        sqer  = np.sum((pred - true  )**2, axis=0)
         mss   = np.sum((pred - y_mean)**2, axis=0)
         tss   = np.sum((true - y_mean)**2, axis=0)
         rss   = np.sum((true - pred  )**2, axis=0)
-        return sqer, mss, tss, rss
+        return mss, tss, rss
 
     def integ_spec(pred, true, y_mean, x_vals, filttran, ifilt):
         """
@@ -258,10 +255,9 @@ def rmse_r2(fpred, ftrue, y_mean,
         else:
             contribs = squared_diffs(pred, true, y_mean)
         n    += pred.shape[0]
-        sqer += contribs[0]
-        mss  += contribs[1]
-        tss  += contribs[2]
-        rss  += contribs[3]
+        mss  += contribs[0]
+        tss  += contribs[1]
+        rss  += contribs[2]
 
         if denorm:
             # Calculate this for the denormalized values
@@ -281,17 +277,16 @@ def rmse_r2(fpred, ftrue, y_mean,
                 contribs = squared_diffs(pred_res, true_res, y_mean_res)
             else:
                 contribs = squared_diffs(pred, true, y_mean)
-            sqer_denorm += contribs[0]
-            mss_denorm  += contribs[1]
-            tss_denorm  += contribs[2]
-            rss_denorm  += contribs[3]
+            mss_denorm  += contribs[0]
+            tss_denorm  += contribs[1]
+            rss_denorm  += contribs[2]
         print("  Batch "+str(j+1)+"/"+str(len(fpred)), end='\r')
     print('')
-    rmse = (sqer / n)**0.5
+    rmse = (rss / n)**0.5
     r2   = 1 - rss / tss
 
     if denorm:
-        rmse_denorm = (sqer_denorm / n)**0.5
+        rmse_denorm = (rss_denorm / n)**0.5
         r2_denorm   = 1 - rss_denorm / tss_denorm
     else:
         rmse_denorm = -1

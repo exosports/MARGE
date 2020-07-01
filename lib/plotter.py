@@ -5,9 +5,11 @@ resume_save: Handles plot filenames when there are existing plots.
 
 loss: Plots the loss and learning rate history.
 
-pred_vs_true: Plots scatterplot of predicted vs true values.
+pred_vs_true: Plots scatterplot of predicted vs. true values.
 
-plot_spec: Plots the predicted spectrum, vs the true spectrum if supplied.
+plot_spec: Plots the predicted spectrum, vs. the true spectrum if supplied.
+
+plot: Simple plot of y vs. x values.
 
 """
 
@@ -39,6 +41,7 @@ def resume_save(fname):
                  1st call to resume_save(): saves path/to/someplot.png
                  2nd call to resume_save(): saves path/to/someplot_res1.png
                  3rd call to resume_save(): saves path/to/someplot_res2.png
+
     """
     if not os.path.exists(fname):
         plt.savefig(fname, bbox_inches='tight')
@@ -69,6 +72,7 @@ def loss(nn, plotdir, fname='history_train_val_loss.png', resume=False):
     Outputs
     -------
     `fname`: image file w/ plot of the loss.
+
     """
     tr_loss  = nn.historyNN.history['loss']
     val_loss = nn.historyNN.history['val_loss']
@@ -129,6 +133,7 @@ def pred_vs_true(fpred_mean, fy_test_un,
     Outputs
     -------
     Plot for each parameter showing the mean predicted values vs. true values.
+
     """
     # Load the data
     y_test_un = np.load(fy_test_un)
@@ -177,6 +182,20 @@ def plot_spec(fname, predspec, truespec=None,
               xvals=None, xlabel=None, ylabel=None):
     """
     Plots the predicted spectrum, vs the known spectrum if supplied.
+
+    Inputs
+    ------
+    fname   : string. Path/to/plot to be saved.
+    predspec: array.  NN output prediction.
+    truespec: array.  (optional) True output.
+    xvals   : array.  (optional) X values associated with NN prediction.
+    xlabel  : string. (optional) X-axis label.
+    ylabel  : string. (optional) Y-axis label.
+
+    Outputs
+    -------
+    Plot of the supplied data, saved as `fname`.
+
     """
     # Set defaults
     if xvals is None:
@@ -243,9 +262,9 @@ def plot(fname, xvals, yvals, xlabel, ylabel):
 
     Inputs
     ------
-    fname: string. Path/to/plot to save.
-    xvals: array.  X-axis values.  If None, uses simple range.
-    yvals: array.  Y-axis values.
+    fname : string. Path/to/plot to save.
+    xvals : array.  X-axis values.  If None, uses simple range.
+    yvals : array.  Y-axis values.
     xlabel: string. X-axis label.
     ylabel: string. Y-axis label.
 

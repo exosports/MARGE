@@ -3,15 +3,13 @@
 Driver for MARGE
 '''
 
-
-import configparser
 import sys, os
+import configparser
 import importlib
 import numpy as np
 
 import keras
 from keras import backend as K
-from keras.layers import ReLU, LeakyReLU, ELU, Softmax
 
 libdir = os.path.dirname(__file__) + '/lib/'
 sys.path.append(libdir)
@@ -74,17 +72,7 @@ def MARGE(confile):
             U.make_dir(preddir)
             U.make_dir(preddir+'valid/')
             U.make_dir(preddir+'test/')
-            # Import the datagen module
-            datagenfile = conf["datagenfile"].rsplit('/', 1)
-            if len(datagenfile) == 2:
-                if os.path.isabs(datagenfile[0]):
-                    sys.path.append(datagenfile[0])
-                else:
-                    sys.path.append(inputdir+datagenfile[0])
-            else:
-                sys.path.append(inputdir)          # Look in inputdir first
-                sys.path.append(libdir+'datagen/') # Check lib/datagen/ after
-            D = importlib.import_module(datagenfile[-1])
+
             # Main options
             datagen     = conf.getboolean("datagen")
             cfile       = conf["cfile"]
@@ -106,6 +94,19 @@ def MARGE(confile):
             normalize   = conf.getboolean("normalize")
             scale       = conf.getboolean("scale")
             seed        = conf.getint("seed")
+
+            # Import the datagen module
+            if datagen or processdat:
+                datagenfile = conf["datagenfile"].rsplit('/', 1)
+                if len(datagenfile) == 2:
+                    if os.path.isabs(datagenfile[0]):
+                        sys.path.append(datagenfile[0])
+                    else:
+                        sys.path.append(inputdir+datagenfile[0])
+                else:
+                    sys.path.append(inputdir)          # Look in inputdir first
+                    sys.path.append(libdir+'datagen/') # Check lib/datagen/ after
+                D = importlib.import_module(datagenfile[-1])
 
             # Files to save
             fmean     = conf["fmean"]
