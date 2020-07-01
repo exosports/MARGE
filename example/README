@@ -2,19 +2,16 @@ Introduction
 ============
 
 This directory holds an example of how to run MARGE, using BART for data 
-generation. It matches the use case demonstrated in Himes et al. (2020).
+generation. It matches the use case demonstrated in Himes et al. (2020), except
+with reduced accuracy to reduce the runtime.
 
 ********************************** IMPORTANT **********************************
 Executing this in its entirety will take significant compute time and resources
 
-Recommended: Linux
-             >= 8 cores
-             >= 12 GB RAM
-             GPU with >= 12 GB RAM
-             >= 500 GB free space
-
-Less than the recommended specs is possible, but it will take significantly 
-more time and will require the user to modify some of the input files.
+Requirements: >= 4 cores
+              >= 6 GB RAM
+              GPU with >= 12 GB RAM
+              >= 500 GB free space
 
 If using an operating system that is not Linux-based, some aspects of the 
 example will likely need to be adjusted.  Users are encouraged to submit 
@@ -23,11 +20,7 @@ necessary for certain operating systems.
 *******************************************************************************
 
 This example is provided to show users the general workflow of the software.
-While we could reduce the compute time/resources required by reducing the 
-number of forward models generated or the number of epochs trained, we want 
-to ensure that a complete example is provided to users.  As such, we 
-*** DO NOT **** recommend that users run this example in its entirety, unless 
-they really, REALLY want to.  Adapt the example to your desired use case.
+We recommend that it is adapted to the user's desired use case.
 
 
 Walkthrough
@@ -66,7 +59,7 @@ Finally, execute MARGE:
   ../MARGE.py example.cfg
 
 It will build the opacity table, generate the data, process it, and then 
-train a convolutional neural network model.  This will take a long time.
+train a dense neural network model.  This will take some time.
 
 
 Description of files
