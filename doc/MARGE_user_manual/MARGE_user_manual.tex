@@ -73,7 +73,7 @@ generation.
 
 The detailed MARGE code documentation and User Manual\footnote{A compiled PDF 
 of the latest version of the manual is available at 
-\href{http://planets.ucf.edu/bart-docs/MARGE_user_manual.pdf}{http://planets.ucf.edu/bart-docs/MARGE_user_manual.pdf}.} 
+\href{https://planets.ucf.edu/bart-docs/MARGE\_user\_manual.pdf}{https://planets.ucf.edu/bart-docs/MARGE\_user\_manual.pdf}.} 
 are provided with the package to assist users in its usage. 
 For additional support, contact the lead author (see Section \ref{sec:team}).
 
@@ -176,7 +176,7 @@ of the resulting model to ensure that the software can be executed in a
 reasonable amount of time (though it will still take a while!).  To improve 
 the results, users may increase the number of spectra generated (numit in BART 
 config), use a finer opacity grid (reduce tempdelt and wndelt in BART config), 
-increase the number of atmospheric layers (n_layers in BART config), and/or 
+increase the number of atmospheric layers (n\_layers in BART config), and/or 
 use a more complicated model architecture (more layers, more nodes).
 
 To begin, copy the requisite files to another directory.  Here we 
@@ -303,12 +303,12 @@ if generating data via BART, the user must create a BART configuration file
 \item layers: strings. Type of each hidden layer.  
                        Options: dense, conv1d, maxpool1d, avgpool1d, flatten, 
                                 dropout
-\item lay_params: list. Parameters for each layer (e.g., kernel size). 
+\item lay\_params: list. Parameters for each layer (e.g., kernel size). 
                         For no parameter or the default, use None.
 \item activations: strings. Type of activation function per layer with nodes.
                         Options: linear, relu, leakyrelu, elu, tanh, sigmoid, 
                                  exponential, softsign, softplus, softmax
-\item act_params: list. Parameters for each activation.  
+\item act\_params: list. Parameters for each activation.  
                         Use None for no parameter or the default value.
                         Values specified only apply to LeakyReLU and ELU.
 
