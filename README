@@ -62,7 +62,8 @@ lib/            - Contains the classes and functions of MARGE.
     BART/       - Files necessary for data generation/processing with BART.
       BARTfunc.py - Modified MCMC function that saves out full spectra.
     datagen.py  - Contains functions for generating/processing data with BART.
-    datagen_pypsg.py - As above, but for the pypsg format (see https://gitlab.com/frontierdevelopmentlab/astrobiology/pypsg).
+    datagen_pypsg.py - As above, but for the pypsg format 
+             (see https://gitlab.com/frontierdevelopmentlab/astrobiology/pypsg).
   loader.py     - Contains functions related to loading processed data.
   NN.py         - Contains the NN model class, and a driver function for model 
                   training/validating/testing.
