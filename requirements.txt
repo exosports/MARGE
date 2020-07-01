@@ -1,0 +1,3 @@
+keras2onnx==1.6.1
+onnx==1.6.0
+onnx2keras==0.0.18
