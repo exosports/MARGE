@@ -119,7 +119,8 @@ def mean_stdev(datafiles, inD, ilog, olog, perc=10, num_per_file=None, verb=Fals
 
 
 def rmse_r2(fpred, ftrue, y_mean, 
-            y_std=None, y_min=None, y_max=None, scalelims=None, olog=False, 
+            y_std=None, y_min=None, y_max=None, scalelims=None, 
+            olog=False, y_mean_delog=None, 
             filters=None, x_vals=None, filt2um=1.0):
     """
     Calculates the root mean squared error (RMSE) and R-squared for a data set.
@@ -145,6 +146,7 @@ def rmse_r2(fpred, ftrue, y_mean,
     scalelims: tuple/list/array. Min/max that the normalized data was scaled to.
     olog  : bool.  Determines if the denormalized values are the log10 of the 
                    true output parameters.
+    y_mean_delog: array. Mean of the training set, not log-scaled.
     filters: list, strings. Filter bandpasses to integrate over.
                             Must be 2-column file: wavelength then transmission.
     x_vals : array.         X values corresponding to the Y values.
@@ -193,6 +195,12 @@ def rmse_r2(fpred, ftrue, y_mean,
             filttran.append(tranfilt[ifilt[i,0]:ifilt[i,1]]) # Store filter
     else:
         integ = False
+
+    if not olog:
+        y_mean_delog = y_mean
+    else:
+        if y_mean_delog is None:
+            raise ValueError("Must give the non-log-scaled training set mean.")
 
     if all(v is not None for v in [y_std, y_min, y_max, scalelims, olog]):
         denorm = True
@@ -271,12 +279,13 @@ def rmse_r2(fpred, ftrue, y_mean,
                 pred = 10**pred
                 true = 10**true
             if integ:
-                pred_res, true_res, y_mean_res = integ_spec(pred,     true, 
-                                                            y_mean,   x_vals, 
-                                                            filttran, ifilt )
+                pred_res, true_res, y_mean_res = integ_spec(pred, true, 
+                                                            y_mean_delog, 
+                                                            x_vals, 
+                                                            filttran, ifilt)
                 contribs = squared_diffs(pred_res, true_res, y_mean_res)
             else:
-                contribs = squared_diffs(pred, true, y_mean)
+                contribs = squared_diffs(pred, true, y_mean_delog)
             mss_denorm  += contribs[0]
             tss_denorm  += contribs[1]
             rss_denorm  += contribs[2]
