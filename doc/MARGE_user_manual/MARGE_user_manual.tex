@@ -179,7 +179,19 @@ config), use a finer opacity grid (reduce tempdelt and wndelt in BART config),
 increase the number of atmospheric layers (n\_layers in BART config), and/or 
 use a more complicated model architecture (more layers, more nodes).
 
-To begin, copy the requisite files to another directory.  Here we 
+\noindent Requirements:
+\begin{itemize}
+\item >= 4 cores
+\item >= 3.5 GB RAM available (recommended system RAM >= 6 GB)
+\item >= 30 GB free space
+\end{itemize}
+
+\noindent Optional:
+\begin{itemize}
+\item GPU with >= 4 GB RAM
+\end{itemize}
+
+\noindent To begin, copy the requisite files to another directory.  Here we 
 assume that directory is parallel to MARGE, called run.  From the MARGE 
 directory,
 \begin{verbatim}

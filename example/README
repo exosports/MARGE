@@ -9,9 +9,9 @@ with reduced accuracy to reduce the runtime.
 Executing this in its entirety will take significant compute time and resources
 
 Requirements: >= 4 cores
-              >= 6 GB RAM
-              GPU with >= 12 GB RAM
-              >= 500 GB free space
+              >= 3.5 GB RAM available (recommended system RAM >= 6 GB)
+              >= 30 GB free space
+Optional    : GPU with >= 4 GB RAM
 
 If using an operating system that is not Linux-based, some aspects of the 
 example will likely need to be adjusted.  Users are encouraged to submit 

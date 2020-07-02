@@ -120,8 +120,8 @@ memory as a single array, set modelper=0 to save out a single file with all
 models.  If modelper>0, the generated .npy files will be saved to a subdirectory
 within BART's output directory, named <name> from the 'savemodel' parameter.
 
-For a detailed example walkthrough, see the example/ subdirectory or the user 
-manual.
+For a detailed example walkthrough, see the README in the example/ subdirectory 
+or the user manual.
 
 
 ML Model Training: Data
