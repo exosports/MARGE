@@ -11,7 +11,7 @@ import numpy as np
 import keras
 from keras import backend as K
 
-libdir = os.path.dirname(__file__) + '/lib/'
+libdir = os.path.join(os.path.dirname(__file__), 'lib', '')
 sys.path.append(libdir)
 
 import loader  as L
@@ -45,8 +45,8 @@ def MARGE(confile):
             conf = config[section]
             ### Unpack the variables ###
             # Directories
-            inputdir  = os.path.abspath(conf["inputdir" ]) + '/'
-            outputdir = os.path.abspath(conf["outputdir"]) + '/'
+            inputdir  = os.path.join(os.path.abspath(conf["inputdir" ]), '')
+            outputdir = os.path.join(os.path.abspath(conf["outputdir"]), '')
             if not os.path.isabs(conf["plotdir"]):
                 plotdir = os.path.join(outputdir, conf["plotdir"], '')
             else:
@@ -62,16 +62,16 @@ def MARGE(confile):
             
             # Create the directories if they do not exist
             U.make_dir(inputdir)
-            U.make_dir(inputdir+'TFRecords/')
+            U.make_dir(os.path.join(inputdir, 'TFRecords', ''))
             U.make_dir(outputdir)
             U.make_dir(plotdir)
             U.make_dir(datadir)
-            U.make_dir(datadir+'train/')
-            U.make_dir(datadir+'valid/')
-            U.make_dir(datadir+'test/')
+            U.make_dir(os.path.join(datadir, 'train', ''))
+            U.make_dir(os.path.join(datadir, 'valid', ''))
+            U.make_dir(os.path.join(datadir, 'test', ''))
             U.make_dir(preddir)
-            U.make_dir(preddir+'valid/')
-            U.make_dir(preddir+'test/')
+            U.make_dir(os.path.join(preddir, 'valid', ''))
+            U.make_dir(os.path.join(preddir, 'test', ''))
 
             # Main options
             datagen     = conf.getboolean("datagen")
@@ -97,15 +97,16 @@ def MARGE(confile):
 
             # Import the datagen module
             if datagen or processdat:
-                datagenfile = conf["datagenfile"].rsplit('/', 1)
+                datagenfile = conf["datagenfile"].rsplit(os.sep, 1)
                 if len(datagenfile) == 2:
                     if os.path.isabs(datagenfile[0]):
                         sys.path.append(datagenfile[0])
                     else:
                         sys.path.append(inputdir+datagenfile[0])
                 else:
-                    sys.path.append(inputdir)          # Look in inputdir first
-                    sys.path.append(libdir+'datagen/') # Check lib/datagen/ after
+                    # Look in inputdir first, check lib/datagen/ after
+                    sys.path.append(inputdir)          
+                    sys.path.append(os.path.join(libdir, 'datagen', ''))
                 D = importlib.import_module(datagenfile[-1])
 
             # Files to save

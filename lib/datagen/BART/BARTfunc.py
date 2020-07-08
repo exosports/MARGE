@@ -16,8 +16,9 @@ import scipy.constants   as sc
 import scipy.interpolate as si
 from mpi4py import MPI
 
-BARTdir = os.path.dirname(os.path.realpath(__file__))+'/../../../modules/BART/'
-sys.path.append(BARTdir+'code/')
+BARTdir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 
+                       '..', '..', '..', 'modules', 'BART', '')
+sys.path.append(os.path.join(BARTdir, 'code', '')
 
 import makeatm   as mat
 import PT        as pt
@@ -25,10 +26,10 @@ import wine      as w
 import reader    as rd
 import constants as c
 
-sys.path.append(BARTdir + "modules/MCcubed/")
+sys.path.append(os.path.join(BARTdir, "modules", "MCcubed", "")
 import MCcubed.utils as mu
 
-sys.path.append(BARTdir + "modules/transit/transit/python")
+sys.path.append(os.path.join(BARTdir, "modules", "transit", "transit", "python")
 import transit_module as trm
 
 

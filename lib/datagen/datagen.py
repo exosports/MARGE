@@ -14,8 +14,9 @@ import configparser
 import numpy as np
 import scipy.constants as sc
 
-sys.path.append(os.path.dirname(os.path.realpath(__file__)) + \
-                '/../../modules/BART/code/')
+BARTdir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 
+                       '..', '..', 'modules', 'BART')
+sys.path.append(os.path.join(BARTdir, 'code'))
 import constants as const
 
 
@@ -23,8 +24,7 @@ def generate_data(cfile, data_dir=None):
     """
     Handles data generation according to specified parameters.
     """
-    out = subprocess.run([os.path.dirname(os.path.abspath(__file__)) \
-                          + '/../../modules/BART/BART.py', '-c', cfile] )
+    out = subprocess.run([os.path.join(BARTdir, 'BART.py'), '-c', cfile])
     return
 
 
@@ -46,24 +46,22 @@ def process_data(cfile, data_dir, preserve=True):
             loc_dir = os.path.join(conf['loc_dir'], '')
             if not os.path.isabs(loc_dir):
                 loc_dir = os.path.join(
-                            os.path.abspath(cfile).rsplit('/', 1)[0], 
+                            os.path.abspath(cfile).rsplit(os.sep, 1)[0], 
                             loc_dir)
             fparams = loc_dir + 'output.npy'
             # Saved models
             savemodel = conf['savemodel']
             # Model directory
-            model_dir = loc_dir + savemodel.replace('.npy', '') + '/'
+            model_dir = loc_dir + savemodel.replace('.npy', '') + os.sep
             # Load file names w/ absolute paths
             fmodels   = os.listdir(model_dir)
             fmodels   = [os.path.join(model_dir, foo) for foo in fmodels]
             # Set up directory tree
-            if not os.path.isabs(loc_dir):
-                data_dir = os.path.join(loc_dir, data_dir, '')
-            else:
-                data_dir = os.path.join(data_dir, '')
-            train_dir = data_dir + 'train/'
-            valid_dir = data_dir + 'valid/'
-            test_dir  = data_dir + 'test/'
+            if not os.path.isabs(data_dir):
+                data_dir = os.path.join(loc_dir, data_dir)
+            train_dir = os.path.join(data_dir, 'train', '')
+            valid_dir = os.path.join(data_dir, 'valid', '')
+            test_dir  = os.path.join(data_dir, 'test' , '')
 
             # Load params file, stack the chains, reshape to (Niter, params)
             modelper = conf.getint('modelper')

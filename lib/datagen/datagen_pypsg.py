@@ -38,23 +38,20 @@ def process_data(cfile, data_dir, preserve=True):
             conf = config[section]
             ### Unpack the variables ###
             # Directory with unprocessed data
-            data_loc = os.path.join(conf['data_loc'], '')
             if not os.path.isabs(data_loc):
                 raise Exception('For data processing with pypsg, data_loc '\
                               + 'must be an absolute path.')
-            train_loc = data_loc + 'train/'
-            valid_loc = data_loc + 'valid/'
-            test_loc  = data_loc + 'test/'
+            train_loc = os.path.join(data_loc, 'train', '')
+            valid_loc = os.path.join(data_loc, 'valid', '')
+            test_loc  = os.path.join(data_loc, 'test' , '')
             # Set up directory tree
             if not os.path.isabs(data_dir):
                 raise Exception('For data processing with pypsg, data_dir '\
                               + 'must be an absolute path.')
-            else:
-                data_dir = os.path.join(data_dir, '') # Ensure trailing /
 
-            train_dir = data_dir + 'train/'
-            valid_dir = data_dir + 'valid/'
-            test_dir  = data_dir + 'test/'
+            train_dir = os.path.join(data_dir, 'train', '')
+            valid_dir = os.path.join(data_dir, 'valid', '')
+            test_dir  = os.path.join(data_dir, 'test' , '')
             # Get relevent indices for slicing
             ibeg = conf.getint('ibeg')
             iend = conf.getint('iend')
@@ -87,14 +84,14 @@ def process_data(cfile, data_dir, preserve=True):
                     inarr   = dat[:, ibeg:iend]
                     outarr  = dat[:, obeg:oend]
                     savearr = np.concatenate((inarr, outarr), axis=-1)
-                    fsave   = outdir + foos[j].rsplit('/', 1)[-1]
+                    fsave   = outdir + foos[j].rsplit(os.sep, 1)[-1]
                     np.save(fsave, savearr)
                 print('')
 
             # Slice and save the wavelength grid
             fxvals = conf['xvals']
             if not os.path.isabs(fxvals):
-                fxvals = os.path.join(cfile.rsplit('/', 1)[0], fxvals)
+                fxvals = os.path.join(cfile.rsplit(os.sep, 1)[0], fxvals)
             xvals  = dat[0, xbeg:xend]
             np.save(fxvals, xvals)
             print("The pypsg data has been processed.")

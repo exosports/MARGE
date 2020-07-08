@@ -252,7 +252,7 @@ class NNModel:
                      ends training.
         """
         # Directory containing the save files
-        savedir = '/'.join(self.weight_file.split('/')[:-1]) + '/'
+        savedir = os.sep.join(self.weight_file.split(os.sep)[:-1]) + os.sep
         fhistory = savedir + 'history.npz'
 
         # Resume properly, if requested
@@ -371,7 +371,7 @@ class NNModel:
 
         # Prefix for the savefiles
         if mode == 'pred' or mode=='true':
-            fname = ''.join([preddir, dataset, '/', mode])
+            fname = ''.join([preddir, dataset, os.sep, mode])
         else:
             raise ValueError("Invalid specification for `mode` parameter of " +\
                              "NNModel.Yeval().\nAllowed options: 'pred' or "  +\
@@ -490,9 +490,9 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         num_valid = datsize[1]
         num_test  = datsize[2]
     except:
-        ftrain = glob.glob(datadir + 'train/' + '*.npy')
-        fvalid = glob.glob(datadir + 'valid/' + '*.npy')
-        ftest  = glob.glob(datadir + 'test/'  + '*.npy')
+        ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
+        fvalid = glob.glob(datadir + 'valid' + os.sep + '*.npy')
+        ftest  = glob.glob(datadir + 'test'  + os.sep + '*.npy')
         num_train = U.data_set_size(ftrain, ncores)
         num_valid = U.data_set_size(fvalid, ncores)
         num_test  = U.data_set_size(ftest,  ncores)
@@ -527,7 +527,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             print("Calculating the mean and standard deviation of the data " +\
                   "using Welford's method.")
             # Compute stats
-            ftrain = glob.glob(datadir + 'train/' + '*.npy')
+            ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
             mean, stdev, datmin, datmax = S.mean_stdev(ftrain, inD, ilog, olog)
             np.save(inputdir + fmean,  mean)
             np.save(inputdir + fstdev, stdev)
@@ -566,7 +566,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             datmin = np.load(inputdir + fmin)
             datmax = np.load(inputdir + fmax)
         except:
-            ftrain = glob.glob(datadir + 'train/' + '*.npy')
+            ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
             mean, stdev, datmin, datmax = S.mean_stdev(ftrain, inD, ilog, olog)
             np.save(inputdir + fmean,  mean)
             np.save(inputdir + fstdev, stdev)
@@ -596,7 +596,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
 
     # Get TFRecord file names
     print('\nLoading TFRecords file names...')
-    TFRpath = inputdir +'TFRecords/' + TFRfile
+    TFRpath = inputdir +'TFRecords' + os.sep + TFRfile
     ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
     fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
     ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
@@ -604,20 +604,20 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     if len(ftrain_TFR) == 0 or len(fvalid_TFR) == 0 or len(ftest_TFR) == 0:
         # Doesn't exist -- make them
         print("\nSome TFRecords files do not exist yet.")
-        ftrain = glob.glob(datadir + 'train/' + '*.npy')
-        fvalid = glob.glob(datadir + 'valid/' + '*.npy')
-        ftest  = glob.glob(datadir + 'test/'  + '*.npy')
+        ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
+        fvalid = glob.glob(datadir + 'valid' + os.sep + '*.npy')
+        ftest  = glob.glob(datadir + 'test'  + os.sep + '*.npy')
         if len(ftrain_TFR) == 0:
             print("Making TFRecords for training data...")
-            U.make_TFRecord(inputdir+'TFRecords/'+TFRfile+'train.tfrecords', 
+            U.make_TFRecord(inputdir+'TFRecords'+os.sep+TFRfile+'train.tfrecords', 
                             ftrain, inD, ilog, olog, batch_size, train_batches)
         if len(fvalid_TFR) == 0:
             print("\nMaking TFRecords for validation data...")
-            U.make_TFRecord(inputdir+'TFRecords/'+TFRfile+'valid.tfrecords', 
+            U.make_TFRecord(inputdir+'TFRecords'+os.sep+TFRfile+'valid.tfrecords', 
                             fvalid, inD, ilog, olog, batch_size, valid_batches)
         if len(ftest_TFR) == 0:
             print("\nMaking TFRecords for test data...")
-            U.make_TFRecord(inputdir+'TFRecords/'+TFRfile+'test.tfrecords', 
+            U.make_TFRecord(inputdir+'TFRecords'+os.sep+TFRfile+'test.tfrecords', 
                             ftest,  inD, ilog, olog, batch_size, test_batches)
         print("\nTFRecords creation complete.")
         # Free memory
@@ -639,7 +639,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             if len(arch) > maxlen:
                 maxlen = len(arch)
             archdir = os.path.join(outputdir, arch, '')
-            wsplit  = weight_file.rsplit('/', 1)[1].rsplit('.', 1)
+            wsplit  = weight_file.rsplit(os.sep, 1)[1].rsplit('.', 1)
             wfile   = ''.join([archdir, wsplit[0], '_', arch, '.', wsplit[1]])
             U.make_dir(archdir)
             nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
@@ -891,8 +891,8 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
 
     # Plot requested cases
     if not rng_test:
-        predfoo = sorted(glob.glob(preddir+'test/pred*'))
-        truefoo = sorted(glob.glob(preddir+'test/true*'))
+        predfoo = sorted(glob.glob(preddir+'test'+os.sep+'pred*'))
+        truefoo = sorted(glob.glob(preddir+'test'+os.sep+'true*'))
         if len(predfoo) > 0 and len(truefoo) > 0:
             print("\nPlotting the requested cases...")
             nplot = 0
@@ -914,7 +914,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                 print("  Plot " + str(nplot) + "/" + str(len(plot_cases)), end='\r')
             print("")
         else:
-            raise Exception("No predictions found in " + preddir + "test/.")
+            raise Exception("No predictions found in " + preddir + "test.")
 
     return
 
