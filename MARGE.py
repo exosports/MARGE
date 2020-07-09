@@ -121,8 +121,25 @@ def MARGE(confile):
             # Data info
             inD  = conf.getint("input_dim")
             outD = conf.getint("output_dim")
-            ilog = conf.getboolean("ilog")
-            olog = conf.getboolean("olog")
+
+            if conf["ilog"] in ["True", "False"]:
+                ilog = conf.getboolean("ilog")
+            elif conf["ilog"] in ["None", "none", ""]:
+                ilog = False
+            elif ',' in conf["ilog"]:
+                ilog = np.array([int(num) for num in conf["ilog"].split(',')])
+            else:
+                ilog = np.array([int(num) for num in conf["ilog"].split()])
+
+            if conf["olog"] in ["True", "False"]:
+                olog = conf.getboolean("olog")
+            elif conf["olog"] in ["None", "none", ""]:
+                olog = False
+            elif ',' in conf["olog"]:
+                olog = np.array([int(num) for num in conf["olog"].split(',')])
+            else:
+                olog = np.array([int(num) for num in conf["olog"].split()])
+
             if scale:
                 scalelims = [int(num) for num in conf["scalelims"].split(',')]
             else:

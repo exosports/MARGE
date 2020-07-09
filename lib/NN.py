@@ -399,7 +399,7 @@ class NNModel:
                                                   self.scalelims),
                                         self.y_mean, self.y_std)
                 if self.olog:
-                    y_batch = 10**y_batch
+                    y_batch[self.olog] = 10**y_batch[self.olog]
             np.save(foo, y_batch)
             print(''.join(['  Batch ', str(i+1), '/', str(num_batches)]), end='\r')
         print('')
@@ -907,8 +907,8 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                                                    y_min, y_max, scalelims),
                                          y_mean, y_std)
                 if olog:
-                    predspec = 10**predspec
-                    truespec = 10**truespec
+                    predspec[olog] = 10**predspec[olog]
+                    truespec[olog] = 10**truespec[olog]
                 P.plot_spec(fname, predspec, truespec, xvals, xlabel, ylabel)
                 nplot += 1
                 print("  Plot " + str(nplot) + "/" + str(len(plot_cases)), end='\r')

@@ -46,9 +46,9 @@ def load_data_file(data_file, inD, ilog=False, olog=False):
 
     # Take log10 as needed
     if ilog:
-        x = np.log10(x)
+        x[ilog] = np.log10(x[ilog])
     if olog:
-        y = np.log10(y)
+        y[olog] = np.log10(y[olog])
 
     return x, y
 
