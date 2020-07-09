@@ -16,15 +16,3 @@ https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_02500-02750_HITEMP20
 https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_02750-03000_HITEMP2010.zip
 https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_03000-03250_HITEMP2010.zip
 https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_03250-03500_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_03500-04150_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_04150-04500_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_04500-05000_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_05000-05500_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_05500-06000_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_06000-06500_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_06500-07000_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_07000-07500_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_07500-08000_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_08000-08500_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_08500-09000_HITEMP2010.zip
-https://hitran.org/hitemp/data/HITEMP-2010/H2O_line_list/01_09000-11000_HITEMP2010.zip
