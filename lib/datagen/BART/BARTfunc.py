@@ -18,7 +18,7 @@ from mpi4py import MPI
 
 BARTdir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 
                        '..', '..', '..', 'modules', 'BART', '')
-sys.path.append(os.path.join(BARTdir, 'code', '')
+sys.path.append(os.path.join(BARTdir, 'code', ''))
 
 import makeatm   as mat
 import PT        as pt
