@@ -399,7 +399,7 @@ class NNModel:
                                                   self.scalelims),
                                         self.y_mean, self.y_std)
                 if self.olog:
-                    y_batch[self.olog] = 10**y_batch[self.olog]
+                    y_batch[:, self.olog] = 10**y_batch[:, self.olog]
             np.save(foo, y_batch)
             print(''.join(['  Batch ', str(i+1), '/', str(num_batches)]), end='\r')
         print('')

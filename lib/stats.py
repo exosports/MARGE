@@ -78,10 +78,11 @@ def mean_stdev(datafiles, inD, ilog, olog, perc=10, num_per_file=None, verb=Fals
                 if verb and data.shape[0] != num_per_file:
                     print("Warning: Incomplete file!", datafiles[i], data.shape)
             # Take logs
+            np.seterr(all='raise')
             if ilog:
-                data[:, :inD][ilog] = np.log10(data[:, :inD][ilog])
+                data[:, :inD][:, ilog] = np.log10(data[:, :inD][:, ilog])
             if olog:
-                data[:, inD:][olog] = np.log10(data[:, inD:][olog])
+                data[:, inD:][:, olog] = np.log10(data[:, inD:][:, olog])
             # Update min/max
             datmin = np.amin(np.vstack([datmin, data]), axis=0)
             datmax = np.amax(np.vstack([datmax, data]), axis=0)
@@ -202,8 +203,7 @@ def rmse_r2(fpred, ftrue, y_mean,
         if y_mean_delog is None:
             raise ValueError("Must give the non-log-scaled training set mean.")
 
-    if all(v is not None for v in [y_std, y_min, y_max, scalelims]) \
-       and not olog:
+    if all(v is not None for v in [y_std, y_min, y_max, scalelims]) or olog:
         denorm = True
     else:
         denorm = False
@@ -277,8 +277,8 @@ def rmse_r2(fpred, ftrue, y_mean,
                                            y_min, y_max, scalelims),
                                  y_mean, y_std)
             if olog:
-                pred[olog] = 10**pred[olog]
-                true[olog] = 10**true[olog]
+                pred[:,olog] = 10**pred[:,olog]
+                true[:,olog] = 10**true[:,olog]
             if integ:
                 pred_res, true_res, y_mean_res = integ_spec(pred, true, 
                                                             y_mean_delog, 
