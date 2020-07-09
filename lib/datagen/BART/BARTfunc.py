@@ -26,10 +26,10 @@ import wine      as w
 import reader    as rd
 import constants as c
 
-sys.path.append(os.path.join(BARTdir, "modules", "MCcubed", "")
+sys.path.append(os.path.join(BARTdir, "modules", "MCcubed", ""))
 import MCcubed.utils as mu
 
-sys.path.append(os.path.join(BARTdir, "modules", "transit", "transit", "python")
+sys.path.append(os.path.join(BARTdir, "modules", "transit", "transit", "python"))
 import transit_module as trm
 
 
