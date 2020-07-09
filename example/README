@@ -32,20 +32,18 @@ Ensure that the repo's submodules have also been cloned.
 When cloning MARGE, this can be done by
   git clone --recursive https://github.com/exosports/MARGE MARGE/
   cd MARGE/
-Alternatively, if MARGE has already been cloned, pull the submodules by 
-navigating to the MARGE directory and 
-  git submodule init
-  git submodule update
+
+Follow the User Manual's instructions to create a working conda environment.
 
 Next, build BART:
   make bart
 
 Now, we are ready to begin.
-Navigate to the directory where the example files are at.
-  cd example
-If the user has copied these files to another location outside of MARGE, 
-navigate there instead.  The paths in some input files will need to be changed 
-by the user. 
+First, we make a directory to run the example and copy the files there:
+  mkdir ../run
+  cp example/* ../run/.
+If the user is running the example from a different setup, file paths will 
+need to be altered.
 
 First, download the line lists:
   cd par
@@ -53,13 +51,15 @@ First, download the line lists:
   cd ..
 
 Next, create the TLI file for BART:
-  ../modules/BART/modules/transit/pylineread/src/pylineread.py -c pyline.cfg
+  ../MARGE/modules/BART/modules/transit/pylineread/src/pylineread.py -c pyline.cfg
+This will take on the order of an hour.
 
 Finally, execute MARGE:
-  ../MARGE.py MARGE.cfg
+  ../MARGE/MARGE.py MARGE.cfg
 
-It will build the opacity table, generate the data, process it, and then 
-train a dense neural network model.  This will take some time.
+It will build the opacity table, generate the data & process it, and then train 
+a dense neural network model.  This will take a few hours, depending on the 
+CPU/GPU used.
 
 
 Description of files

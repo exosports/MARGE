@@ -92,6 +92,17 @@ If running MARGE in data generation mode, users must first compile BART's
 submodules. This can be done by entering
     make bart
 into a terminal while in the MARGE directory.
+This requires SWIG.  If the user does not have SWIG installed, they 
+can easily add SWIG to the current conda environment by entering
+    conda install swig
+into the terminal.
+
+Note that the supplied conda environment does not include SWIG.  Also note 
+that it uses tensorflow-gpu, which assumes the user has Nvidia drivers 
+installed.  If this is not the case, after building the environment, non-GPU 
+users must enter 
+    conda remove -n marge_homer tensorflow-gpu
+and follow the prompts.  This will remove the requirement for Nvidia drivers.
 
 For more details, see the MARGE User Manual.
 

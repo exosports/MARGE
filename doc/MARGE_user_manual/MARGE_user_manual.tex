@@ -134,17 +134,18 @@ data generation.  MARGE was developed using MPICH version 3.3.2.
 \subsection{Install and Compile}
 \label{sec:install}
 
+\subsubsection{Unix}
+
+\noindent This is our recommended installation method.  The following 
+instructions have been verified on Ubuntu and may need to be slightly modified 
+for other Unix distributions (e.g., Mac).
+
 \noindent To begin, obtain the latest stable version of MARGE.  Decide on a 
 local directory to hold MARGE.  Let the path to this directory be 
 MARGE. Now, clone the repository:
 \begin{verbatim}
 git clone --recursive https://github.com/exosports/MARGE MARGE/
 cd MARGE/
-\end{verbatim}
-
-\noindent For data generation with BART, users must build BART's submodules:
-\begin{verbatim}
-make bart
 \end{verbatim}
 
 \noindent MARGE contains a file to easily build a conda environment capable of 
@@ -155,10 +156,46 @@ conda env create -f environment.yml
 
 \noindent Then, activate the environment:
 \begin{verbatim}
-conda activate marge
+conda activate marge_homer
 \end{verbatim}
 
-\noindent You are now ready to run MARGE.
+\noindent Users that do not have Nvidia GPU drivers installed will need to 
+remove the tensorflow-gpu package:
+\begin{verbatim}
+conda remove -n marge_homer tensorflow-gpu
+\end{verbatim}
+\noindent Follow the prompt to upgrade/downgrade relevant packages.
+
+\noindent You are now ready to run MARGE!
+
+\noindent Data generation with BART requires SWIG.  For users that do not 
+already have it installed, it can be easily installed via conda:
+\begin{verbatim}
+conda install swig
+\end{verbatim}
+
+\noindent To use BART, its submodules must be compiled:
+\begin{verbatim}
+make bart
+\end{verbatim}
+
+\noindent You are now ready to run MARGE with BART!
+
+
+\subsubsection{Windows}
+
+\noindent Windows is not yet fully supported.  We advise that Windows 10 users 
+follow the Unix instructions using the Windows Subsystem for Linux, which 
+provides a Bash terminal.
+
+\noindent The BART compilation scripts require a C compiler (e.g., gcc).  
+Additionally, some of the compilation scripts are intended to use Bash.  
+Problems can arise due to the return character used in Windows, so users may 
+need to make use of a utility that converts line endings.  
+
+\noindent If a user finds a method to run MARGE in Windows, we encourage them 
+to share their installation method to improve the documentation.
+
 
 
 \section{Example}
