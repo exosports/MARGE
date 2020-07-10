@@ -3,7 +3,7 @@
 % Please note this document will be automatically compiled and hosted online
 % after each commit to master. Because of this, renaming or moving the
 % document should be done carefully. To see the compiled document, go to
-% http://planets.ucf.edu/bart-docs/MARGE_user_manual.pdf
+% https://exosports.github.io/MARGE/doc/MARGE_User_Manual.html
 
 \documentclass[letterpaper, 12pt]{article}
 \input{top-MARGE_user_manual}
@@ -73,7 +73,7 @@ generation.
 
 The detailed MARGE code documentation and User Manual\footnote{A compiled PDF 
 of the latest version of the manual is available at 
-\href{https://planets.ucf.edu/bart-docs/MARGE\_user\_manual.pdf}{https://planets.ucf.edu/bart-docs/MARGE\_user\_manual.pdf}.} 
+\href{https://exosports.github.io/MARGE/doc/MARGE_User_Manual.html}{https://exosports.github.io/MARGE/doc/MARGE_User_Manual.html}.} 
 are provided with the package to assist users in its usage. 
 For additional support, contact the lead author (see Section \ref{sec:team}).
 
@@ -340,7 +340,11 @@ if generating data via BART, the user must create a BART configuration file
 \item input\_dim  : int.  Dimensionality of the input  to the NN.
 \item output\_dim : int.  Dimensionality of the output of the NN.
 \item ilog        : bool. Determines whether to take the log10 of the input  data.
+                          Alternatively, specify comma-, space-, or newline-separated 
+                          integers to selectively take the log of certain inputs.
 \item olog        : bool. Determines whether to take the log10 of the output data.
+                          Alternatively, specify comma-, space-, or newline-separated 
+                          integers to selectively take the log of certain outputs.
 
 \item gridsearch : bool. Determines whether to perform a gridsearch over 
                          architectures.

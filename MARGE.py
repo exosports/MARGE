@@ -122,23 +122,35 @@ def MARGE(confile):
             inD  = conf.getint("input_dim")
             outD = conf.getint("output_dim")
 
-            if conf["ilog"] in ["True", "False"]:
+            if conf["ilog"] in ["True", "true", "T", "False", "false", "F"]:
                 ilog = conf.getboolean("ilog")
             elif conf["ilog"] in ["None", "none", ""]:
                 ilog = False
-            elif ',' in conf["ilog"]:
-                ilog = [int(num) for num in conf["ilog"].split(',')]
+            elif conf["ilog"] in [",", " ", "\n"]:
+                if "," in conf["ilog"]:
+                    ilog = [int(num) for num in conf["ilog"].split(',')]
+                else:
+                    ilog = [int(num) for num in conf["ilog"].split()]
+                if any(num >= inD for num in ilog):
+                    raise ValueError("One or more ilog indices exceed the " + \
+                                     "specified number of inputs.")
             else:
-                ilog = [int(num) for num in conf["ilog"].split()]
+                raise ValueError("ilog specification not understood.")
 
-            if conf["olog"] in ["True", "False"]:
+            if conf["olog"] in ["True", "true", "T", "False", "false", "F"]:
                 olog = conf.getboolean("olog")
             elif conf["olog"] in ["None", "none", ""]:
                 olog = False
-            elif ',' in conf["olog"]:
-                olog = [int(num) for num in conf["olog"].split(',')]
+            elif conf["olog"] in [",", " ", "\n"]:
+                if "," in conf["olog"]:
+                    olog = [int(num) for num in conf["olog"].split(',')]
+                else:
+                    olog = [int(num) for num in conf["olog"].split()]
+                if any(num >= outD for num in olog):
+                    raise ValueError("One or more olog indices exceed the " + \
+                                     "specified number of outputs.")
             else:
-                olog = [int(num) for num in conf["olog"].split()]
+                raise ValueError("olog specification not understood.")
 
             if scale:
                 scalelims = [int(num) for num in conf["scalelims"].split(',')]

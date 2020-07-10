@@ -31,7 +31,7 @@ models as a fast approximation to radiative transfer (RT).
 
 MARGE comes with complete documentation as well as a user manual to assist 
 in its usage.  Users can find the latest MARGE User Manual at 
-http://planets.ucf.edu/bart-docs/MARGE_user_manual.pdf.
+https://exosports.github.io/MARGE/doc/MARGE_User_Manual.html.
 
 MARGE is an open-source project that welcomes improvements from the community 
 to be submitted via pull requests on Github.  To be accepted, such improvements 
@@ -213,7 +213,11 @@ weight_file: str.  File containing NN model weights.
 input_dim   : int.  Dimensionality of the input  to the NN.
 output_dim  : int.  Dimensionality of the output of the NN.
 ilog        : bool. Determines whether to take the log10 of the input  data.
+                    Alternatively, specify comma-, space-, or newline-separated 
+                    integers to selectively take the log of certain inputs.
 olog        : bool. Determines whether to take the log10 of the output data.
+                    Alternatively, specify comma-, space-, or newline-separated 
+                    integers to selectively take the log of certain outputs.
 
 gridsearch  : bool. Determines whether to perform a gridsearch over 
                     architectures.
