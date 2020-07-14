@@ -126,6 +126,8 @@ def MARGE(confile):
                 ilog = conf.getboolean("ilog")
             elif conf["ilog"] in ["None", "none", ""]:
                 ilog = False
+            elif conf["ilog"].isdigit():
+                ilog = int(conf["ilog"])
             elif any(pun in conf["ilog"] for pun in [",", " ", "\n"]):
                 if "," in conf["ilog"]:
                     ilog = [int(num) for num in conf["ilog"].split(',')]
@@ -141,6 +143,8 @@ def MARGE(confile):
                 olog = conf.getboolean("olog")
             elif conf["olog"] in ["None", "none", ""]:
                 olog = False
+            elif conf["olog"].isdigit():
+                olog = int(conf["olog"])
             elif any(pun in conf["olog"] for pun in [",", " ", "\n"]):
                 if "," in conf["olog"]:
                     olog = [int(num) for num in conf["olog"].split(',')]
