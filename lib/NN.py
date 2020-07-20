@@ -304,7 +304,7 @@ class NNModel:
                       "than the epochs that\nthe model has already been "     +\
                       "trained for ({}).  The model has been loaded,\nbut "   +\
                       "not trained any further.".format(str(epochs), 
-                                                        str(init_epochs)))
+                                                        str(init_epoch)))
                 return
             # Batch size is commented out because that is handled by TFRecords
             self.historyNN = self.model.fit(initial_epoch=init_epoch, 
@@ -496,7 +496,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         num_train = U.data_set_size(ftrain, ncores)
         num_valid = U.data_set_size(fvalid, ncores)
         num_test  = U.data_set_size(ftest,  ncores)
-        np.save(inputdir + fsize, np.array([num_train, num_valid, num_test]))
+        np.save(inputdir + fsize, np.array([num_train, num_valid, num_test], dtype=int))
         del ftrain, fvalid, ftest
 
     print("Data set sizes")
