@@ -317,7 +317,7 @@ def MARGE(confile):
                 fxvals = None
             else:
                 # Will be loaded in NN.py
-                if os.path.isabs(conf["xvals"]:
+                if os.path.isabs(conf["xvals"]):
                     fxvals = conf["xvals"]
                 else:
                     fxvals = inputdir + conf["xvals"]
