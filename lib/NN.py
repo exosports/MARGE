@@ -628,7 +628,10 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
 
     # Load the xvals
-    xvals = np.load(fxvals)
+    if fxvals is not None:
+        xvals = np.load(fxvals)
+    else:
+        xvals = None
 
     # Perform grid search
     if gridsearch:

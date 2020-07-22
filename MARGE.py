@@ -313,7 +313,14 @@ def MARGE(confile):
 
             # Plotting parameters
             xlabel     = conf["xlabel"]
-            fxvals     = inputdir + conf["xvals"] # Will be loaded in NN.py
+            if conf["xvals"] in ["None", "none", "False"]:
+                fxvals = None
+            else:
+                # Will be loaded in NN.py
+                if os.path.isabs(conf["xvals"]:
+                    fxvals = conf["xvals"]
+                else:
+                    fxvals = inputdir + conf["xvals"]
             ylabel     = conf["ylabel"]
             plot_cases = [int(num) for num in conf["plot_cases"].split()]
 
