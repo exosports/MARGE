@@ -1,4 +1,4 @@
-name: marge_homer
+name: marge
 channels:
   - defaults
 dependencies:

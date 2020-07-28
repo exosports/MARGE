@@ -370,7 +370,7 @@ class NNModel:
                     " or 'test'\nPlease correct this and try again.")
 
         # Prefix for the savefiles
-        if mode == 'pred' or mode=='true':
+        if mode == 'pred' or mode == 'true':
             fname = ''.join([preddir, dataset, os.sep, mode])
         else:
             raise ValueError("Invalid specification for `mode` parameter of " +\
@@ -703,10 +703,17 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                  lengthscale, max_lr, clr_mode, clr_steps, 
                  weight_file, stop_file='./STOP', 
                  train_flag=False, shuffle=False, resume=False)
-    nn.model.load_weights(weight_file) # Load the model
-    # Save in ONNX format
-    #onnx_model = keras2onnx.convert_keras(nn.model)
-    #onnx.save_model(onnx_model, nn.weight_file.rsplit('.', 1)[0] + '.onnx')
+    if '.h5' in weight_file or '.hdf5' in weight_file:
+        nn.model.load_weights(weight_file) # Load the model
+        # Save in ONNX format
+        try:
+            onnx_model = keras2onnx.convert_keras(nn.model)
+            onnx.save_model(onnx_model, nn.weight_file.rsplit('.', 1)[0] + '.onnx')
+        except Exception as e:
+            print("Unable to convert the Keras model to ONNX:")
+            print(e)
+    else:
+        nn.model = onnx_to_keras(onnx.load_model(weight_file), ['input_1'])
 
     # Validate model
     if (validflag or trainflag) and not rng_test:

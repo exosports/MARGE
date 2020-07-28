@@ -277,7 +277,7 @@ def plot(fname, xvals, yvals, xlabel, ylabel):
     plt.plot(xvals, yvals)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-    plt.savefig(fname)
+    plt.savefig(fname, bbox_inches='tight', dpi=600)
     plt.close()
 
 

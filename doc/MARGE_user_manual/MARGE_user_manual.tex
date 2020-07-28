@@ -122,7 +122,7 @@ versions of packages:
 \item cuDNN 7.5.00
 \item ONNX 1.6.0
 \item keras2onnx 1.6.1
-\item onnx2keras 0.0.18
+\item onnx2keras 0.0.22
 \end{itemize}
 
 \noindent MARGE also requires a working MPI distribution if using BART for 
@@ -155,13 +155,13 @@ conda env create -f environment.yml
 
 \noindent Then, activate the environment:
 \begin{verbatim}
-conda activate marge_homer
+conda activate marge
 \end{verbatim}
 
 \noindent Users that do not have Nvidia GPU drivers installed will need to 
 remove the tensorflow-gpu package:
 \begin{verbatim}
-conda remove -n marge_homer tensorflow-gpu
+conda remove -n marge tensorflow-gpu
 \end{verbatim}
 \noindent Follow the prompt to upgrade/downgrade relevant packages.
 

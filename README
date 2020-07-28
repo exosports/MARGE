@@ -88,6 +88,11 @@ At present, MARGE uses BART, the Bayesian Atmospheric Radiative Transfer
 (BART) code, for data generation.  For details, see the associated user manual 
 in the modules/BART/doc directory.
 
+To build the included conda environment, enter 
+    conda env create -f environment.yml
+into a terminal.  Then, activate it via 
+    conda activate marge
+
 If running MARGE in data generation mode, users must first compile BART's 
 submodules. This can be done by entering
     make bart
@@ -101,7 +106,7 @@ Note that the supplied conda environment does not include SWIG.  Also note
 that it uses tensorflow-gpu, which assumes the user has Nvidia drivers 
 installed.  If this is not the case, after building the environment, non-GPU 
 users must enter 
-    conda remove -n marge_homer tensorflow-gpu
+    conda remove -n marge tensorflow-gpu
 and follow the prompts.  This will remove the requirement for Nvidia drivers.
 
 For more details, see the MARGE User Manual.
@@ -316,7 +321,7 @@ versions of packages:
  - cuDNN 7.5.00
  - ONNX 1.6.0
  - keras2onnx 1.6.1
- - onnx2keras 0.0.18
+ - onnx2keras 0.0.22
 
 MARGE also requires a working MPI distribution if using BART for 
 data generation.  MARGE was developed using MPICH version 3.3.2.
