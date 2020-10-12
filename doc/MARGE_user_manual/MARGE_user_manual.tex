@@ -61,6 +61,10 @@ Dr.~Joseph \textsc{Harrington}
 \item Zacchaeus Scheffer, University of Central Florida
 \end{itemize}
 
+\noindent We would also like to acknowledge and thank James Mang and 
+Nick Susemiehl for testing the software and informing the User Manual 
+instructions related to Windows and Mac.
+
 \section{Introduction}
 \label{sec:theory}
 
@@ -179,6 +183,19 @@ make bart
 \end{verbatim}
 
 \noindent You are now ready to run MARGE with BART!
+
+
+\subsubsection{Mac}
+
+Mac users can follow the above Unix instructions to set up the conda 
+environment.  However, Mac has certain libraries installed by default that 
+can conflict with a related library within the conda environment.  This can 
+produce some concerning Runtime Warnings when executing MARGE.  After setting 
+up the environment and activating it as detailed above, enter 
+\begin{verbatim}
+conda install nomkl
+\end{verbatim}
+\noindent into the terminal.  This will solve the problem.
 
 
 \subsubsection{Windows}
