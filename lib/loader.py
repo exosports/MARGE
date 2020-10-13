@@ -39,6 +39,11 @@ def load_data_file(data_file, inD, ilog=False, olog=False):
     # Ensure 2D
     if data.ndim == 1:
         data = data[None, :]
+    elif data.ndim >= 3:
+        raise ValueError("Data file has 3+ dimensions, but loader.py is not " +\
+                         "written to handle this\nsituation.  Ensure a 2D "   +\
+                         "shape, or code in support for 3+ dimensions and\n"  +\
+                         "submit a pull request.")
 
     # Slice inputs/outputs
     x = data[:, :inD]
