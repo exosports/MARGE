@@ -13,9 +13,12 @@ plot: Simple plot of y vs. x values.
 
 """
 
-import sys, os
+import sys, os, platform
 import numpy as np
 import matplotlib as mpl
+if platform.system() == 'Darwin':
+    # Mac fix: use a different backend
+    mpl.use("TkAgg")
 import matplotlib.pyplot as plt
 import scipy.signal      as ss
 from sklearn import metrics

@@ -8,7 +8,7 @@ driver: function that handles data & model initialization, and
 
 """
 
-import sys, os
+import sys, os, platform
 import time
 import random
 from io import StringIO
@@ -16,6 +16,10 @@ import glob
 import pickle
 
 import numpy as np
+import matplotlib as mpl
+if platform.system() == 'Darwin':
+    # Mac fix: use a different backend
+    mpl.use("TkAgg")
 import matplotlib.pyplot as plt
 
 from sklearn import metrics
