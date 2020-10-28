@@ -150,20 +150,17 @@ MARGE. Now, clone the repository:
 git clone --recursive https://github.com/exosports/MARGE MARGE/
 cd MARGE/
 \end{verbatim}
-\newline
 
 \noindent MARGE contains a file to easily build a conda environment capable of 
 executing the software.  Create the environment via
 \begin{verbatim}
 conda env create -f environment.yml
 \end{verbatim}
-\newline
 
 \noindent Then, activate the environment:
 \begin{verbatim}
 conda activate marge
 \end{verbatim}
-\newline
 
 \noindent Users that do not have Nvidia GPU drivers installed will need to 
 remove the tensorflow-gpu package:
@@ -179,13 +176,11 @@ already have it installed, it can be easily installed via conda:
 \begin{verbatim}
 conda install swig
 \end{verbatim}
-\newline
 
 \noindent To use BART, its submodules must be compiled:
 \begin{verbatim}
 make bart
 \end{verbatim}
-\newline
 
 \noindent You are now ready to run MARGE with BART!
 
