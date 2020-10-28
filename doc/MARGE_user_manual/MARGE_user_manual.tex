@@ -150,17 +150,20 @@ MARGE. Now, clone the repository:
 git clone --recursive https://github.com/exosports/MARGE MARGE/
 cd MARGE/
 \end{verbatim}
+\newline
 
 \noindent MARGE contains a file to easily build a conda environment capable of 
 executing the software.  Create the environment via
 \begin{verbatim}
 conda env create -f environment.yml
 \end{verbatim}
+\newline
 
 \noindent Then, activate the environment:
 \begin{verbatim}
 conda activate marge
 \end{verbatim}
+\newline
 
 \noindent Users that do not have Nvidia GPU drivers installed will need to 
 remove the tensorflow-gpu package:
@@ -169,18 +172,24 @@ conda remove -n marge tensorflow-gpu
 \end{verbatim}
 \noindent Follow the prompt to upgrade/downgrade relevant packages.
 
+\newline
+
 \noindent You are now ready to run MARGE!
+
+\newline
 
 \noindent Data generation with BART requires SWIG.  For users that do not 
 already have it installed, it can be easily installed via conda:
 \begin{verbatim}
 conda install swig
 \end{verbatim}
+\newline
 
 \noindent To use BART, its submodules must be compiled:
 \begin{verbatim}
 make bart
 \end{verbatim}
+\newline
 
 \noindent You are now ready to run MARGE with BART!
 
@@ -200,18 +209,37 @@ conda install nomkl
 
 \subsubsection{Windows}
 
-\noindent Windows is not yet fully supported.  We advise that Windows 10 users 
-follow the Unix instructions using the Windows Subsystem for Linux, which 
-provides a Bash terminal.
+\noindent We offer support for Windows through two methods.  For users that 
+prefer the Windows Subsytem for Linux, simply follow the Unix instructions 
+above.  For users that prefer to work purely in Windows, we advise using 
+Anaconda's terminal-like prompt.\newline
 
-\noindent The BART compilation scripts require a C compiler (e.g., gcc).  
-Additionally, some of the compilation scripts are intended to use Bash.  
-Problems can arise due to the return character used in Windows, so users may 
-need to make use of a utility that converts line endings.  
+\noindent For a pure-Windows installation, some minor adjustments are required.
+These instructions assume the user is working within the Anaconda prompt.  
+First, edit the environment.yml file and remove the entry for mpich and mpi4py. 
+Users must install the Microsoft MPI (MS-MPI) package.  Microsoft's Github repo 
+for MS-MPI includes a link to the most recent version of the package: download 
+it and follow the installation instructions.  Additionally, it requires the 
+Windows 10 SDK.  Two directories must be added to the path; their default 
+locations are C:\\Program Files\\Microsoft MPI\\Bin and 
+C:\\Program Files (x86)\\Microsoft SDKs\\MPI. \newline
 
-\noindent If a user finds a method to run MARGE in Windows, we encourage them 
-to share their installation method to improve the documentation.
+After completing the above, users may follow the steps described in the Unix 
+section.  After building the conda environment from the modified environment.yml
+file and activating it, users must enter
+\begin{verbatim}
+conda install -c intel mpi4py
+\end{verbatim}
+\noindent to finish setting up MPI.\newline
 
+\noindent If for whatever reason the installation does not work following these 
+instructions, installing Visual Studio may rectify that.  If this is required, 
+we would appreciate feedback letting us know so that we may update the 
+instructions here. \newline
+
+\noindent If a user finds another method to run MARGE 
+in Windows, we encourage them to share their installation method to improve the 
+documentation.
 
 
 \section{Example}

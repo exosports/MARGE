@@ -354,14 +354,6 @@ def MARGE(confile):
 
 
 if __name__ == "__main__":
-    #U.limit_mem()
-    try:
-        MARGE(*sys.argv[1:])
-    except MemoryError:
-        sys.stderr.write('\nERROR: Memory limit exceeded.')
-        sys.exit(1)
-
-
-
+    MARGE(*sys.argv[1:])
 
 

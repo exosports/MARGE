@@ -43,7 +43,6 @@ load_TFdataset: Loads a TFRecords dataset for usage.
 """
 
 import sys, os
-import resource
 import multiprocessing as mp
 import functools
 import glob
@@ -77,30 +76,6 @@ def make_dir(some_dir):
                                               os.strerror(e.errno)))
         sys.exit()
     return
-
-
-def limit_mem():
-    """
-    Function written to limit memory usage. 
-    Unfortunately, it limits GPU usage too, so it isn't used.
-    """
-    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-    resource.setrlimit(resource.RLIMIT_AS, (get_free_mem() * 1024 * 0.9, hard))
-
-
-def get_free_mem():
-    """
-    Function written to return available memory.
-    See limit_mem().
-    """
-    with open('/proc/meminfo', 'r') as meminfo:
-        free_memory = 0
-        for line in meminfo:
-            entries = line.split()
-            if str(entries[0]) == 'MemAvailable:':
-                free_memory = int(entries[1])
-                break
-    return free_memory
 
 
 def get_num_per_file(foos, nfoo=10):
