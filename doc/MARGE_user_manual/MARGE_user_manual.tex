@@ -564,8 +564,55 @@ MARGE produces the following outputs if all modes are executed:
 \noindent Note that BART's output files are not discussed here; see the BART 
 User Manual for details.
 
+\section{Determining the Optimal Model Architecture}
 
-\section{Determining the CLR Parameters}
+While users are free to train an arbitrary model on some data set, it is 
+advised that users perform a model grid search as well as a CLR `range test' 
+to optimize the model parameters.  This section will describe these two 
+important steps.
+
+\subsection{Model Grid Search}
+
+A model grid search is very helpful in determining model architectures that are 
+well suited to the problem at hand.  In short, this process involves training 
+a variety of models (different layers, nodes, activation functions, etc.) and 
+finding which model(s) achieve(s) small loss values (and therefore higher 
+accuracy).  Because this process can involve training many models, it can be  
+helpful to use only a subset of the data (ensuring it has similar statistical 
+properties) and/or to train for fewer epochs than normal (e.g., 20 -- 50, 
+depending on the problem).  This will ensure that models can be quickly 
+trained, evaluated, and compared.  It is important that these results are 
+only compared across models trained for the same number of epochs, using the 
+same training and validation sets. \newline
+
+\noindent To perform a grid search, users must set the `gridsearch' 
+configuration key to True.  Then, each of the model architecture parameters 
+(config keys: architectures, nodes, layers, lay_params, activations, act_params)
+will be sequentially considered, with a summary report produced once all 
+models have been trained.  Note that each model will be trained using the same 
+learning rate policy, so it is often a good idea to perform the grid search over
+the same set of architectures using a few different learning rate policies to 
+ensure that the `best' architectures are found (e.g., a model that performs 
+poorly for Policy 1 may perform best for Policy 2). \newline
+
+\noindent In the configuration file, each architecture must be split by indented
+new lines.  For example, 
+\begin{verbatim}
+layers = conv1d flatten dense dense
+         dense dense dense
+\end{verbatim}
+\noindent would constitute 2 separate models: one with a 1D convolutional layer 
+followed by 2 dense layers, and the other being 3 dense layers.  There would, 
+of course, need to be 2 specifications for the other aforementioned config keys 
+in a similar manner.\newline
+
+\noindent When executing the grid search configuration file, each model will 
+be trained.  At the end, MARGE outputs a summary of the minimum validation loss 
+for each model considered, allowing a straightforward comparison of the 
+architectures considered.
+
+
+\subsection{CLR Parameters}
 
 When using a cyclical learning rate (CLR), the selection of the minimum/maximum 
 limits are an important consideration.  This section will walk the user through 
