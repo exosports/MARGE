@@ -313,6 +313,52 @@ a configuration file of parameters.  Once configured, MARGE is executed via
 the terminal as described in Section \ref{sec:example}.
 
 
+\subsection{MARGE Input Data Format}
+In order to use MARGE, users must ensure their data has been formatted into 
+MARGE's desired format.\newline
+
+\noindent At present, MARGE handles 1D data cases (e.g., spectra).  2D data 
+cases (e.g., images) will be supported at a later date, though we welcome users 
+to add this capability sooner and submit it via a pull request.\newline
+
+\noindent The data must be structured as follows:
+\noindent\framebox{\begin{minipage}[t]{0.97\columnwidth}%
+\dirtree{%
+ .1 data. 
+ .2 test.
+ .2 train.
+ .2 valid. 
+}
+\end{minipage}}
+\vspace{0.7cm}
+
+\noindent The `data' directory, specified by the configuration key `datadir'
+(see the following section), can take any name the user desires.  However, 
+the 3 subdirectories must be named exactly as shown (test, train, 
+valid).  These subdirectories will hold the data files. Users may have any 
+number of data files within the subdirectories (e.g., test could have a single 
+file with all of the test cases, while train has 100 files with the training 
+cases). \newline
+
+\noindent Each data file must be a Numpy binary (.NPY) file.  Each file must 
+be a 2D array, shaped as (number of cases, number of inputs + number of 
+outputs).  That is, each row of the 2D array will hold the corresponding 
+inputs and outputs for a particular case. \newline
+
+\noindent For example, if there are 2 data cases, 
+where Case 1 has inputs (1, 2, 3) and outputs (4, 5, 6, 7), while Case 2 has 
+inputs (10, 11, 12) and outputs (30, 40, 50, 60), the 2D array would look like 
+\begin{verbatim}
+[[ 1  2  3  4  5  6  7]
+ [10 11 12 30 40 50 60]]
+\end{verbatim}
+
+\noindent MARGE includes the ability to take a user-specified function to 
+process the data.  For users that wish to utilize this, look at the example 
+functions in MARGE/lib/datagen/, and note how they are included into the 
+example configuration file.
+
+
 \subsection{MARGE Configuration File}
 \label{sec:config}
 The MARGE configuration file is the main file that sets the arguments for a 
@@ -518,6 +564,66 @@ MARGE produces the following outputs if all modes are executed:
 \noindent Note that BART's output files are not discussed here; see the BART 
 User Manual for details.
 
+
+\section{Determining the CLR Parameters}
+
+When using a cyclical learning rate (CLR), the selection of the minimum/maximum 
+limits are an important consideration.  This section will walk the user through 
+this process, called a `range test'.  The end of the section also includes some 
+discussion about the CLR modes.  \newline
+
+\noindent First, we must properly set some variables in the configuration file:
+\begin{itemize}
+\item epochs: set to a small number, like 10
+\item clr_mode: triangular
+\item clr_steps: range test
+\item lengthscale: set to a small number, like 1e-7
+\item max_lr: set to a value closer to 1, like 1e-1.
+\end{itemize}
+
+\noindent When executing MARGE, there will be a plot produced of the loss vs. 
+learning rate value.  It will look somewhat similar to Figure 
+\ref{fig:rangetest}.  Using this plot, the learning rate boundaries can be 
+readily determined.  The minimum learning rate corresponds to the value where 
+the loss first begins to decrease, while the maximum learning rate corresponds 
+to the value where the loss begins to dramtaically increase.\newline
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.49\textwidth, clip]{range_test.png}
+\caption{Example output of a range test using MARGE.  For small learning rates 
+(\textless 5e-4), the loss remains unchanged becaues the learning rate is too 
+small to adjust the NN's weights.  Above this value, the loss begins to decrease
+until around a learning rate of 8e-3, where the loss dramatically increases. 
+From this range test, a good learning rate range would be perhaps 6e-4 -- 
+7e-3.}  
+\label{fig:rangetest}
+\end{figure}
+
+\noindent It is also important to consider the CLR mode when choosing these 
+boundaries.  The `triangular' mode (which constantly varies the 
+learning rate between the min/max values) allows good performance when choosing 
+the min/max values from the plot, as described above.  By comparison, the 
+`triangular2' mode (which performs like triangular, except that the max 
+learning rate is decreased at the end of each cycle) can require users to 
+select a slightly larger minimum value to achieve good performance.  This is 
+because, if the minimum rate corresponds to the smallest possible change in 
+loss, once the max rate has been decreased to be effectively equal to the min 
+rate, it will not allow the weights to significantly change.  For this reason, 
+we recommend that users select a slightly larger min value; in the example of 
+Figure \ref{fig:rangetest}, a value like 7e-4 -- 9e-4 would be a good choice 
+for the `triangular2' policy.  Similar precautions should be considered when 
+using other CLR modes that adjust the max rate.
+
+
+\section{FAQ}
+
+This section will cover some frequently asked questions about training NNs, 
+as well as specific questions about MARGE.  Have a question that isn't 
+answered below?  Please send it to the corresponding author so we can add 
+it to this section! \newline
+
+\noindent TODO
 
 
 \section{Be Kind}
