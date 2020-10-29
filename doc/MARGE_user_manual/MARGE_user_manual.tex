@@ -356,7 +356,8 @@ inputs (10, 11, 12) and outputs (30, 40, 50, 60), the 2D array would look like
 \noindent MARGE includes the ability to take a user-specified function to 
 process the data.  For users that wish to utilize this, look at the example 
 functions in MARGE/lib/datagen/, and note how they are included into the 
-example configuration file.
+example configuration file.  Users that prefer to manually split their 
+data set should set \tt{processdat = False} in the configuration file.
 
 
 \subsection{MARGE Configuration File}
@@ -565,7 +566,7 @@ MARGE produces the following outputs if all modes are executed:
 User Manual for details.
 
 \section{Determining the Optimal Model Architecture}
-
+\label{sec:optarch}
 While users are free to train an arbitrary model on some data set, it is 
 advised that users perform a model grid search as well as a CLR `range test' 
 to optimize the model parameters.  This section will describe these two 
@@ -575,15 +576,15 @@ important steps.
 
 A model grid search is very helpful in determining model architectures that are 
 well suited to the problem at hand.  In short, this process involves training 
-a variety of models (different layers, nodes, activation functions, etc.) and 
-finding which model(s) achieve(s) small loss values (and therefore higher 
-accuracy).  Because this process can involve training many models, it can be  
-helpful to use only a subset of the data (ensuring it has similar statistical 
-properties) and/or to train for fewer epochs than normal (e.g., 20 -- 50, 
-depending on the problem).  This will ensure that models can be quickly 
-trained, evaluated, and compared.  It is important that these results are 
-only compared across models trained for the same number of epochs, using the 
-same training and validation sets. \newline
+a variety of models (different layers, nodes, activation functions, batch 
+sizes, etc.) and finding which model(s) achieve(s) small loss values (and 
+therefore higher accuracy).  Because this process can involve training 
+many models, it can be  helpful to use only a subset of the data (ensuring 
+it has similar statistical properties) and/or to train for fewer epochs than 
+normal (e.g., 20 -- 50, depending on the problem).  This will ensure that 
+models can be quickly trained, evaluated, and compared.  It is important 
+that these results are only compared across models trained for the same 
+number of epochs, using the same training and validation sets. \newline
 
 \noindent To perform a grid search, users must set the `gridsearch' 
 configuration key to True.  Then, each of the model architecture parameters 
@@ -610,7 +611,16 @@ in a similar manner.\newline
 \noindent When executing the grid search configuration file, each model will 
 be trained.  At the end, MARGE outputs a summary of the minimum validation loss 
 for each model considered, allowing a straightforward comparison of the 
-architectures considered.
+architectures considered.\newline
+
+\noindent If this description seems confusing, it may be helpful to look at 
+the supplied configuration file, MARGE_gridsearch.cfg, in the example directory.
+This file contains many different architectures, demonstrating how users 
+should format these configuration keys as well as an idea about what 
+architectures may be good to consider.  It is important to keep in mind that 
+the architectures included in this file are selected for the problem at hand, 
+so users may need to consider simpler or more complex models, depending on 
+their desired use case.
 
 
 \subsection{CLR Parameters}
@@ -671,7 +681,77 @@ as well as specific questions about MARGE.  Have a question that isn't
 answered below?  Please send it to the corresponding author so we can add 
 it to this section! \newline
 
-\noindent TODO
+\noindent \textbf{Q: I have a data set.  How should I split it into 
+training/validation/testing sets?}  A: There is no set way to split the data, 
+but a general guideline would be something like 70\% for training, 20\% for 
+validation, and 10\% for testing.  For large data sets that contain many more 
+cases than are necessary to learn the problem at hand, it may be helpful to 
+reduce the proportion for training and increase the validation and/or testing 
+set sizes (see next Q for related discussion).  However, we strongly advise 
+against adjusting this split to improve
+performance on the testing set, as that situation would mean that the testing 
+set is being used for optimization rather than testing.  Users should decide 
+on a split, train and validate the model, and then consider whether the split 
+should be adjusted (e.g., more training cases are needed).  \newline 
+
+\noindent Another important 
+consideration is that the training, validation, and testing sets should have 
+roughly equal statistical properties (mean, standard deviation, minimum, 
+maximum).  This is important, as there is an implicit assumption that the 
+training data statistically represents the other subsets of data.\newline
+
+\noindent \textbf{Q: How much data do I need?} A: This is somewhat empirical, 
+but in general, more data is better.  We generally advise against using small 
+(\textless 10,000) data sets.  A helpful metric to consider is, if the 
+parameter space were sampled on a grid, how many samples per parameter would 
+your dataset result in?  For example, if I have 100,000 training cases for a 
+10-parameter model, this is just over 3 samples per parameter on an 
+equally-spaced grid ($3.16^{10} \sim 100000$).  For some problems, this may be 
+adequate.  For comparison, consider 100,000 training cases for a 3-parameter 
+model.  That would be roughly equal to 46 samples per parameter, which is 
+likely more than necessary for most problems.  In that case, it would be 
+advised to shift some of the training data to the validation and/or testing 
+sets. \newline
+
+\noindent \textbf{Q: How do I decide on the model architecture?} A: This is 
+determined via a model grid search.  See Section \ref{sec:optarch} for details.
+
+\noindent \textbf{Q: How do I decide on a batch size?} A: This is largely 
+selected empirically, as part of the grid search.  
+Large and small batch sizes each have their own pros 
+and cons, so it is generally a good idea to consider a few different sizes.  
+For some problems, larger batch 
+sizes can perform equivalently to smaller batch sizes yet train faster, due 
+to fewer training steps per epoch.  For other problems, smaller batch sizes 
+can achieve higher accuracy, as the mean squared error would be more sensitive 
+to cases that perform poorly.  A good starting point is to compare the 
+performance of batch sizes of 256 and 32.  Then, adjust it based on 
+observations.  On GPUs, calculations will be optimized for 2{\^}N batch 
+sizes.\newline
+
+\noindent \textbf{Q: My testing set size is X, but I'm not able to plot 
+the X-1 case.  Why?}  A: Because of some annoying limitations of the Tensorflow 
+version used in MARGE, the data subsets are truncated to ensure an integer 
+number of batches.  For example, if we have 15,000 test cases and are using a 
+batch size of 256, the test set will really only have 14,848 cases (exactly 58 
+batches).  A future update to MARGE's Tensorflow version may correct this 
+limitation. \newline
+
+\noindent \textbf{Q: I changed the batch size/data split/data normalization 
+and now my results look horrible (e.g., negative $R^2$ values)!  What 
+happened?}  A: For efficiency, MARGE 
+does not produce new TFRecords or .NPY statistics files with each run; if 
+they already exist, they are re-used to save compute time.  If you adjust the 
+batch size, data split, or data normalization, this will adjust how the code 
+works internally, but these important input files will remain unchanged, leading 
+to strange behavior (e.g., negative $R^2$ values).  Whenever adjusting anything 
+related to the inputs, it is advised to delete the TFRecords and .NPY statistics
+files so that they are re-computed for the adjusted inputs. \newline
+
+\noindent \textbf{Q: I'm on Mac, and I'm hitting an OMP error.  How do 
+I fix this?}  A: See the Mac subsection in Section \ref{sec:install}.  Mac has 
+OpenMP installed, which can conflict with some package in the conda 
+environment.  The solution is to install the `nomkl' conda package.  
 
 
 \section{Be Kind}
