@@ -314,6 +314,7 @@ class NNModel:
                       ') is less than or equal to the\nepochs that the model '+\
                       'has already been trained for ('+str(init_epoch)+').  ' +\
                       'The model has\nbeen loaded, but not trained further.')
+                self.historyNN = tf.keras.callbacks.History()
                 self.historyNN.history = np.load(fhistory)
                 return
             # Batch size is commented out because that is handled by TFRecords
@@ -340,6 +341,8 @@ class NNModel:
                 val_loss = np.concatenate((history['val_loss'], 
                             self.historyNN.history['val_loss']))
                 np.savez(fhistory, loss=loss, val_loss=val_loss)
+                self.historyNN.history['loss'] = loss
+                self.historyNN.history['val_loss'] = val_loss
 
         # Load best set of weights
         self.model.load_weights(self.weight_file)
