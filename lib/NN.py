@@ -310,11 +310,11 @@ class NNModel:
         if self.train_flag:
             # Ensure at least 1 epoch happens when training
             if init_epoch >= epochs:
-                print("The requested number of training epochs ({}) is less " +\
-                      "than the epochs that\nthe model has already been "     +\
-                      "trained for ({}).  The model has been loaded,\nbut "   +\
-                      "not trained any further.".format(str(epochs), 
-                                                        str(init_epoch)))
+                print('The requested number of training epochs ('+str(epochs) +\
+                      ') is less than or equal to the\nepochs that the model '+\
+                      'has already been trained for ('+str(init_epoch)+').  ' +\
+                      'The model has\nbeen loaded, but not trained further.')
+                self.historyNN = np.load(fhistory)
                 return
             # Batch size is commented out because that is handled by TFRecords
             self.historyNN = self.model.fit(initial_epoch=init_epoch, 
