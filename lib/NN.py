@@ -430,7 +430,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
            lengthscale, max_lr, clr_mode, clr_steps, 
            epochs, patience, 
            weight_file, resume, 
-           plot_cases, fxvals, xlabel, ylabel,
+           plot_cases, fxvals, xlabel, ylabel, start,
            filters=None, filt2um=1.):
     """
     Driver function to handle model training and evaluation.
@@ -683,6 +683,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             with open(outputdir + 'gridsearch.txt', 'a') as foo:
                 foo.write(arch.ljust(maxlen, ' ') + ': ' \
                           + str(minvl[i]) + '\n')
+        print("total duration (grid search):", time.time() - start)
         return
 
     # Train a model
@@ -935,7 +936,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             print("")
         else:
             raise Exception("No predictions found in " + preddir + "test.")
-
+    print("total duration:", time.time() - start)        
     return
 
 

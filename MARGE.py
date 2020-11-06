@@ -3,7 +3,10 @@
 Driver for MARGE
 '''
 
-import sys, os
+import sys, os, platform
+if platform.system() == 'Windows':
+    # Windows Ctrl+C fix
+    os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
 import configparser
 import importlib
 import numpy as np
@@ -19,6 +22,7 @@ import NN
 import stats   as S
 import utils   as U
 
+import time
 
 def MARGE(confile):
     """
@@ -35,6 +39,7 @@ def MARGE(confile):
     Run it from a terminal like
       user@machine:/dir/to/MARGE$ ./MARGE.py config.cfg
     """
+    start = time.time()
     # Load configuration file
     config = configparser.ConfigParser(allow_no_value=True)
     config.read_file(open(confile, 'r'))
@@ -347,7 +352,7 @@ def MARGE(confile):
                           layers, lay_params, activations, act_params, nodes, 
                           lengthscale, max_lr, clr_mode, clr_steps, 
                           epochs, patience, weight_file, resume, 
-                          plot_cases, fxvals, xlabel, ylabel, 
+                          plot_cases, fxvals, xlabel, ylabel, start,
                           filters, filt2um)
 
     return
