@@ -96,29 +96,23 @@ def loss(nn, plotdir, fname='history_train_val_loss.png', resume=False):
     resume_save(plotdir+fname.replace('loss', 'loss_zoom'))
     plt.close()
 
-    clr_lr   = nn.historyCLR['lr']
-    clr_loss = nn.historyCLR['loss']
-    plt.figure()
-    plt.title('CLR History')
-    if np.min(clr_loss) > 0:
-        plt.loglog(clr_lr, clr_loss)
-    else:
-        plt.semilogx(clr_lr, clr_loss)
-    plt.xlabel("Learning rate")
-    plt.ylabel("Loss")
-    pname = plotdir+fname.replace('train_val_loss', 'clr_loss')
-    if resume:
-        resume_save(pname)
-    else:
-        plt.savefig(pname, bbox_inches='tight')
-    plt.ylim(np.nanmin(val_loss), 
-             np.nanmin(val_loss)+np.abs(np.nanmin(val_loss)*0.5))
-    pname_zoom = plotdir+fname.replace('train_val_loss', 'clr_loss_zoom')
-    if resume:
-        resume_save(pname_zoom)
-    else:
-        plt.savefig(pname_zoom, bbox_inches='tight')
-    plt.close()
+    if nn.historyCLR is not None:
+        clr_lr   = nn.historyCLR['lr']
+        clr_loss = nn.historyCLR['loss']
+        plt.figure()
+        plt.title('CLR History')
+        if np.min(clr_loss) > 0:
+            plt.loglog(clr_lr, clr_loss)
+        else:
+            plt.semilogx(clr_lr, clr_loss)
+        plt.xlabel("Learning rate")
+        plt.ylabel("Loss")
+        pname = plotdir+fname.replace('train_val_loss', 'clr_loss')
+        if resume:
+            resume_save(pname)
+        else:
+            plt.savefig(pname, bbox_inches='tight')
+        plt.close()
 
 
 def pred_vs_true(fpred_mean, fy_test_un, 

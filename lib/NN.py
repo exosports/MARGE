@@ -316,6 +316,7 @@ class NNModel:
                       'The model has\nbeen loaded, but not trained further.')
                 self.historyNN = tf.keras.callbacks.History()
                 self.historyNN.history = np.load(fhistory)
+                self.historyCLR = None
                 return
             # Batch size is commented out because that is handled by TFRecords
             self.historyNN = self.model.fit(initial_epoch=init_epoch, 
