@@ -9,6 +9,7 @@ driver: function that handles data & model initialization, and
 """
 
 import sys, os, platform
+import warnings
 import time
 import random
 from io import StringIO
@@ -274,7 +275,12 @@ class NNModel:
                                 + 'yet available. Please specify a\n.h5 file.')
             else:
                 self.model.load_weights(self.weight_file)
-            init_epoch = len(np.load(fhistory)['loss'])
+            try:
+                init_epoch = len(np.load(fhistory)['loss'])
+            except:
+                warning.warn("Resume specified, but history file not found.\n" \
+                           + "Training a new model.")
+                init_epoch = 0
         # Train a new model
         else:
             init_epoch = 0
@@ -658,7 +664,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                          layers[i], lay_params[i], 
                          activations[i], act_params[i], nodes[i], 
                          lengthscale, max_lr, clr_mode, clr_steps, 
-                         wfile, stop_file='./STOP', 
+                         wfile, stop_file='./STOP', resume=resume, 
                          train_flag=True, shuffle=True)
             nn.train(train_batches, valid_batches, epochs, patience)
             P.loss(nn, archdir)
