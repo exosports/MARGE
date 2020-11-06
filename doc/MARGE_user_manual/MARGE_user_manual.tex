@@ -753,7 +753,13 @@ files so that they are re-computed for the adjusted inputs. \newline
 \noindent \textbf{Q: I'm on Mac, and I'm hitting an OMP error.  How do 
 I fix this?}  A: See the Mac subsection in Section \ref{sec:install}.  Mac has 
 OpenMP installed, which can conflict with some package in the conda 
-environment.  The solution is to install the `nomkl' conda package.  
+environment.  The solution is to install the `nomkl' conda package.  \newline
+
+\noindent \textbf{Q: When I try to train a model, I get an ``unable to create 
+file'' error.  What's going on?}  A: The most likely cause would be that the 
+filename is too long, or that the directory the weights are being saved into 
+does not exist.  The latter can only happen when specifying an absolute path 
+for the weight file. 
 
 
 \section{Be Kind}
