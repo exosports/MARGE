@@ -4,9 +4,7 @@ Driver for MARGE
 '''
 
 import sys, os, platform
-if platform.system() == 'Windows':
-    # Windows Ctrl+C fix
-    os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
+import time
 import configparser
 import importlib
 import numpy as np
@@ -22,7 +20,10 @@ import NN
 import stats   as S
 import utils   as U
 
-import time
+if platform.system() == 'Windows':
+    # Windows Ctrl+C fix
+    os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
+
 
 def MARGE(confile):
     """
@@ -352,8 +353,10 @@ def MARGE(confile):
                           layers, lay_params, activations, act_params, nodes, 
                           lengthscale, max_lr, clr_mode, clr_steps, 
                           epochs, patience, weight_file, resume, 
-                          plot_cases, fxvals, xlabel, ylabel, start,
+                          plot_cases, fxvals, xlabel, ylabel, 
                           filters, filt2um)
+
+    print("Total duration:", time.time() - start)
 
     return
 
