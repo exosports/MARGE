@@ -1,6 +1,7 @@
 name: marge
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - mpi4py=3.0.3
   - mpich=3.3.2
