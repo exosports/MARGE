@@ -567,7 +567,9 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             y_mean_delog = np.load(inputdir + 
                                    fmean.replace(".npy", "_delog.npy"))
         except:
+            ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
             mean_delog = S.mean_stdev(ftrain, inD, ilog, False)[0]
+            del ftrain
             y_mean_delog = mean_delog[inD:]
             np.save(inputdir + fmean.replace(".npy", "_delog.npy"), y_mean_delog)
     else:
