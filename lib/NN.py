@@ -335,7 +335,8 @@ class NNModel:
             if not os.path.exists(fhistory) or not self.resume:
                 np.savez(fhistory, loss=self.historyNN.history['loss'], 
                                val_loss=self.historyNN.history['val_loss'],
-                                     lr=self.historyCLR['lr'])
+                                     lr=self.historyCLR['lr'], 
+                               clr_loss=self.historyCLR['loss'])
             else:
                 history  = np.load(fhistory)
                 loss     = np.concatenate((history['loss'], 
