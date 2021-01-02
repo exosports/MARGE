@@ -514,8 +514,8 @@ if generating data via BART, the user must create a BART configuration file
                    bandpass over `xvals`. 
                    Two columns, wavelength and transmission.
                    Used to compute statistics for band-integrated values.
-\item filt2um : float. (default: 1.0) Factor to convert the filter files' 
-                       X values to microns. 
+\item filtconv : float. (default: 1.0) Factor to convert the filter files' 
+                       X-axis values to the units of `xvals`. 
                        Only used if `filters` is specified.
 \end{itemize}
 

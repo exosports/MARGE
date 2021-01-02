@@ -168,12 +168,12 @@ def MARGE(confile):
                 scalelims = [0., 1.] # Won't change the data values
             try:
                 filters = conf["filters"].split()
-                filt2um = float(conf["filt2um"])
+                filtconv = float(conf["filtconv"])
                 print('\nFilters specified. Will compute performance ' \
                     + 'metrics over integrated bandpasses.\n')
             except:
                 filters = None
-                filt2um = 1.
+                filtconv = 1.
                 print('\nFilters not specified. Will compute performance ' \
                     + 'metrics for each output.\n')
 
@@ -354,7 +354,7 @@ def MARGE(confile):
                           lengthscale, max_lr, clr_mode, clr_steps, 
                           epochs, patience, weight_file, resume, 
                           plot_cases, fxvals, xlabel, ylabel, 
-                          filters, filt2um)
+                          filters, filtconv)
 
     print("Total duration:", time.time() - start)
 

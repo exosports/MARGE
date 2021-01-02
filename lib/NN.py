@@ -437,7 +437,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
            epochs, patience, 
            weight_file, resume, 
            plot_cases, fxvals, xlabel, ylabel, 
-           filters=None, filt2um=1.):
+           filters=None, filtconv=1.):
     """
     Driver function to handle model training and evaluation.
 
@@ -494,8 +494,8 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     filters    : list, strings.  Paths/to/filter files.  Default: None
                          If specified, will compute RMSE/R2 stats over the 
                          integrated filter bandpasses.
-    filt2um    : float.  Conversion factor for filter file wavelengths to 
-                         microns.  Default: 1.0
+    filtconv   : float.  Conversion factor for filter file x-axis values to 
+                         desired unit.  Default: 1.0
     """
     # Get file names, calculate number of cases per file
     print('Loading files & calculating total number of batches...')
@@ -752,12 +752,12 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, 
                                   olog=olog, y_mean_delog=y_mean_delog, 
                                   x_vals=xvals, 
-                                  filters=filters, filt2um=filt2um)
+                                  filters=filters, filtconv=filtconv)
         else:
             val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, 
                                   y_std, y_min, y_max, scalelims, 
                                   olog, y_mean_delog, 
-                                  xvals, filters, filt2um)
+                                  xvals, filters, filtconv)
         # RMSE
         if np.any(val_stats[0] != -1) and np.any(val_stats[1] != -1):
             print('  Normalized RMSE       : ', val_stats[0])
@@ -844,12 +844,12 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, 
                                    olog=olog, y_mean_delog=y_mean_delog, 
                                    x_vals=xvals, 
-                                   filters=filters, filt2um=filt2um)
+                                   filters=filters, filtconv=filtconv)
         else:
             test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, 
                                    y_std, y_min, y_max, scalelims, 
                                    olog, y_mean_delog, 
-                                   xvals, filters, filt2um)
+                                   xvals, filters, filtconv)
         # RMSE
         if np.any(test_stats[0] != -1) and np.any(test_stats[1] != -1):
             print('  Normalized RMSE       : ', test_stats[0])
