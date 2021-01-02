@@ -1,0 +1,41 @@
+Machine learning Algorithm for Radiative transfer of Generated Exoplanets 
+(MARGE), a code to generate data sets, process data, and train 
+neural network models.
+
+This project was completed with the support of the NASA Fellowship Activity, 
+grant 80NSSC20K0682, held by Principal Investigator Joseph Harrington in 
+support of Michael Himes, the principal developer of HOMER.  Adam D. Cobb,
+David C. Wright, and Zacchaeus Scheffer  contributed to some aspects of the 
+code, as described in the MARGE documentation.
+
+Copyright (C) 2020 University of Central Florida.
+All rights reserved.
+
+This is a test version only, and may not be redistributed to any third
+party.  Please refer such requests to us.  This program is distributed
+in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+PURPOSE.
+
+MARGE is under a reproducible-research license.  Until MARGE's first 
+publication, we do not permit others to redistribute the code in either 
+original or modified form, nor to publish work based in whole or in part on 
+the output of this code.  By downloading, running, or modifying this code, 
+you agree to these conditions.  We do encourage sharing any modifications 
+with us and discussing them openly.
+For more details, see 
+https://planets.ucf.edu/resources/reproducible-research/software-license/
+
+We welcome your feedback, but do not guarantee support.  Please send
+feedback or inquiries to:
+Michael Himes <mhimes@knights.ucf.edu>  
+Joseph Harrington <jh@physics.ucf.edu>   
+
+or alternatively,
+Joseph Harrington and Michael Himes
+UCF PSB 441
+4111 Libra Drive
+Orlando, FL 32816-2385
+USA
+
+Thank you for using MARGE!

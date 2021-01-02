@@ -1,0 +1,19 @@
+\BOOKMARK [1][-]{section.1}{1 Team Members}{}% 1
+\BOOKMARK [1][-]{section.2}{2 Introduction}{}% 2
+\BOOKMARK [1][-]{section.3}{3 Installation}{}% 3
+\BOOKMARK [2][-]{subsection.3.1}{3.1 System Requirements}{section.3}% 4
+\BOOKMARK [2][-]{subsection.3.2}{3.2 Install and Compile}{section.3}% 5
+\BOOKMARK [3][-]{subsubsection.3.2.1}{3.2.1 Unix}{subsection.3.2}% 6
+\BOOKMARK [3][-]{subsubsection.3.2.2}{3.2.2 Mac}{subsection.3.2}% 7
+\BOOKMARK [3][-]{subsubsection.3.2.3}{3.2.3 Windows}{subsection.3.2}% 8
+\BOOKMARK [1][-]{section.4}{4 Example}{}% 9
+\BOOKMARK [1][-]{section.5}{5 Program Inputs}{}% 10
+\BOOKMARK [2][-]{subsection.5.1}{5.1 MARGE Input Data Format}{section.5}% 11
+\BOOKMARK [2][-]{subsection.5.2}{5.2 MARGE Configuration File}{section.5}% 12
+\BOOKMARK [3][-]{subsubsection.5.2.1}{5.2.1 BART Configuration File}{subsection.5.2}% 13
+\BOOKMARK [1][-]{section.6}{6 Program Outputs}{}% 14
+\BOOKMARK [1][-]{section.7}{7 Determining the Optimal Model Architecture}{}% 15
+\BOOKMARK [2][-]{subsection.7.1}{7.1 Model Grid Search}{section.7}% 16
+\BOOKMARK [2][-]{subsection.7.2}{7.2 CLR Parameters}{section.7}% 17
+\BOOKMARK [1][-]{section.8}{8 FAQ}{}% 18
+\BOOKMARK [1][-]{section.9}{9 Be Kind}{}% 19
