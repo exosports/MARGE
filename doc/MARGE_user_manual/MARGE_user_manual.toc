@@ -1,0 +1,19 @@
+\contentsline {section}{\numberline {1}Team Members}{2}{section.1}%
+\contentsline {section}{\numberline {2}Introduction}{2}{section.2}%
+\contentsline {section}{\numberline {3}Installation}{2}{section.3}%
+\contentsline {subsection}{\numberline {3.1}System Requirements}{2}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Install and Compile}{3}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Unix}{3}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Mac}{4}{subsubsection.3.2.2}%
+\contentsline {subsubsection}{\numberline {3.2.3}Windows}{4}{subsubsection.3.2.3}%
+\contentsline {section}{\numberline {4}Example}{5}{section.4}%
+\contentsline {section}{\numberline {5}Program Inputs}{6}{section.5}%
+\contentsline {subsection}{\numberline {5.1}MARGE Input Data Format}{6}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}MARGE Configuration File}{7}{subsection.5.2}%
+\contentsline {subsubsection}{\numberline {5.2.1}BART Configuration File}{10}{subsubsection.5.2.1}%
+\contentsline {section}{\numberline {6}Program Outputs}{10}{section.6}%
+\contentsline {section}{\numberline {7}Determining the Optimal Model Architecture}{11}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Model Grid Search}{11}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}CLR Parameters}{12}{subsection.7.2}%
+\contentsline {section}{\numberline {8}FAQ}{13}{section.8}%
+\contentsline {section}{\numberline {9}Be Kind}{14}{section.9}%
