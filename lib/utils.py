@@ -3,14 +3,16 @@ This file contains utility functions that improve the usage of MARGE.
 
 make_dir: Creates a directory if it does not already exist.
 
-limit_mem: Sets a limit on the amount of memory the program can use.
-           Not currently used by MARGE.
+load_path: Helper function for reading in config parameters with file paths.
 
-get_free_mem: Gets the amount of free memory on the system.
-              Not currently used by MARGE.
+prepare_layers: Helper function to ensure the supplied architecture parameters
+                are valid
 
-get_num_per_file: Calculates the number of cases per file in a data set.
-                  Not currently used by MARGE.
+prepare_gridsearch: Helper function to ensure the set of architectures
+                    specified in the config file are valid
+
+count_cases: Helper function for multiprocessing.
+             Counts number of cases in file.
 
 data_set_size: Calculates the number of cases in a data set.
 
@@ -21,15 +23,15 @@ scale: Scales some data according to min, max, and a desired range.
 
 descale: Descales some data according to min, max, and scaled range.
 
-normalize: Normalizes some data according to mean & stdev.
+normalize: Normalizes some data according to mean & standard deviation.
 
-denormalize: Denormalizes some data according to mean & stdev.
+denormalize: Denormalizes some data according to mean & standard deviation.
 
 _float_feature: helper function to make Feature definition
 
 _bytes_feature: helper function to make Feature definition
 
-get_file_names: Find all file names in the data directory with a given file 
+get_file_names: Find all file names in the data directory with a given file
                 extension.
 
 make_TFRecord: Creates TFRecords representation of a data set.
@@ -47,6 +49,7 @@ import multiprocessing as mp
 import functools
 import glob
 import numpy as np
+import pickle
 import scipy.stats as ss
 import tensorflow as tf
 
@@ -63,51 +66,191 @@ def make_dir(some_dir):
 
     Outputs
     -------
-    None. Creates `some_dir` if it does not already exist. 
+    None. Creates `some_dir` if it does not already exist.
     Raises an error if the directory cannt be created.
     """
     try:
-      os.mkdir(some_dir)
+      os.makedirs(some_dir)
     except OSError as e:
       if e.errno == 17: # Already exists
         pass
       else:
-        print("Cannot create folder '{:s}'. {:s}.".format(model_dir,
+        print("Cannot create folder '{:s}'. {:s}.".format(some_dir,
                                               os.strerror(e.errno)))
         sys.exit()
     return
 
 
-def get_num_per_file(foos, nfoo=10):
+def load_path(key, basedir):
     """
-    Loads a few files to determine the number of entries per data file.
-    Not used by MARGE, but left here in case a user wants to use it for 
-    some data set where the data files adhere to the same # of cases 
-    per data file.
+    Helper function for reading in config parameters with file paths.
+    Returns an absolute path.
+    If `key` is a relative path, then it is assumed to be relative to `basedir`.
+    """
+    if os.path.isabs(key):
+        return key
+    else:
+        return os.path.join(basedir, key)
+
+
+def prepare_layers(layers, lay_params, nodes, activations=None, act_params=None):
+    """
+    Helper function to ensure the supplied architecture parameters are valid
 
     Inputs
     ------
-    foos: list, strings. Paths/to/data files.
-    nfoo: int. Number of files to consider for the calculation.
+    layers     : list, strings. Layer types for each layer in the architecture.
+    lay_params : list, ints or None.  Parameters for each layer, where needed.
+    nodes      : list, ints.  Number of nodes in each layer that contains nodes.
+    activations: list, strings. Activation function types for each layer in the
+                                architecture.
+    act_params : list, ints or None. Parameters for each activation function,
+                                     where needed.
 
     Outputs
     -------
-    num_per_file: int. Number of entries per data file.
+    lay_params : like the input, except Nones have been replaced by defaults
+                 for layer types that have a free parameter
+    activations: like the input, except the strings are now function objects
     """
-    num_in_file = np.zeros(min(len(foos), nfoo))
-    for i in range(min(len(foos), nfoo)):
-        num_in_file[i] = np.load(foos[i]).shape[0]
-    return int(ss.mode(num_in_file, None, 'raise')[0][0])
+    # Check for allowed layer types
+    for lay in layers:
+        if lay not in ["dense", "dropout",
+                       "concretedropout", "spatialconcretedropout", 
+                       "conv1d", "conv2d", "conv3d",
+                       "conv2dtranspose", "conv3dtranspose", 
+                       "maxpool1d", "maxpool2d", "maxpool3d",
+                       "avgpool1d", "avgpool2d", "avgpool3d",
+                       "flatten"]:
+            raise TypeError('Invalid layer type specified.\n'    \
+                          + 'Given layer type: ' + lay + '\n'    \
+                          + 'Allowed options:\ndense, dropout,\n'\
+                          + 'concretedropout, spatialconcretedropout,\n'
+                          + 'conv1d, conv2d, conv3d,\n'           \
+                          + 'conv2dtranspose, conv3dtranspose,\n' \
+                          + 'maxpool1d, maxpool2d, maxpool3d,\n' \
+                          + 'avgpool1d, avgpool2d, avgpool3d,\n' \
+                          + 'flatten')
+    # Make sure the right number of entries exist
+    nlay = layers.count("dense")  + layers.count("conv1d") + \
+           layers.count("conv2d") + layers.count("conv3d") + \
+           layers.count("conv2dtranspose") + layers.count("conv3dtranspose") + \
+           layers.count("concretedropout") + layers.count("spatialconcretedropout")
+    if nlay != len(nodes):
+        raise ValueError("Number of Dense/Conv layers does "  \
+            + "not match the number of hidden\nlayers with " \
+            + "nodes.")
+    if len(layers) != len(lay_params):
+        raise ValueError("Number of layer types does not match " \
+            + "the number of layer parameters.")
+    else:
+        # Set default layer parameters if needed
+        for j in range(len(layers)):
+            if lay_params[j] in [None, 'None', 'none']:
+                if 'conv1d' in layers[j]:
+                    lay_params[j] = 3
+                elif 'conv2d' in layers[j]:
+                    lay_params[j] = (3,3)
+                elif 'conv3d' in layers[j]:
+                    lay_params[j] = (3,3,3)
+                elif layers[j] in ['maxpool1d', 'avgpool1d']:
+                    lay_params[j] = 2
+                elif layers[j] in ['maxpool2d', 'avgpool2d']:
+                    lay_params[j] = (2,2)
+                elif layers[j] in ['maxpool3d', 'avgpool3d']:
+                    lay_params[j] = (2,2,2)
+            elif layers[j] == 'dropout':
+                lay_params[j] = float(lay_params[j])
+            else:
+                lay_params[j] = int(lay_params[j])
+    if activations is not None and act_params is not None:
+        if len(activations) != len(nodes):
+            raise ValueError("Number of activation functions does "    \
+                + "not match the number of hidden\nlayers with nodes.")
+        if len(activations) != len(act_params):
+            raise ValueError("Number of activation functions does not " \
+                + "match the number of\nactivation function "          \
+                + "parameters.")
+        else:
+            # Load the activation functions
+            for j in range(len(activations)):
+                activations[j] = L.load_activation(activations[j],
+                                                   act_params[j])
+    return lay_params, activations
 
 
-def count_cases(foo):
+def prepare_gridsearch(architectures, layers, lay_params, nodes, activations, act_params):
+    """
+    Helper function to ensure the set of architectures specified in the config
+    file are valid
+
+    Inputs
+    ------
+    architectures: list, strings.  Identifiers for each model architecture.
+    layers, lay_params, nodes, activations, and act_params are lists of lists.
+    See prepare_layers() for a description of individual list elements.
+
+    Outputs
+    -------
+    lay_params : like the input, except Nones have been replaced by defaults
+                 for layer types that have a free parameter
+    activations: like the input, except the strings are now function objects
+    """
+    # Check that there are the proper number of entries for each key
+    if len(architectures) != len(layers):
+        raise ValueError("Number of architecture names and sets " \
+                       + "of layers do not match.")
+    elif len(architectures) != len(lay_params):
+        raise ValueError("Number of architecture names and sets " \
+                       + "of layer parameters do not\nmatch.")
+    elif len(architectures) != len(nodes):
+        raise ValueError("Number of architecture names and sets " \
+                       + "of nodes do not match.")
+    elif len(architectures) != len(activations):
+        raise ValueError("Number of architecture names and sets " \
+                       + "of activations do not match.")
+    elif len(architectures) != len(act_params):
+        raise ValueError("Number of architecture names and sets " \
+                       + "of activation parameters do\nnot match.")
+    # Check that each architecture is consistent and able to be set up
+    for i in range(len(nodes)):
+        lay_params[i], activations[i] = prepare_layers(layers[i], lay_params[i],
+                                                       nodes[i], activations[i],
+                                                       act_params[i])
+    return lay_params, activations
+
+
+def count_cases(foo, ishape, oshape):
     """
     Helper function for multiprocessing. Counts number of cases in file.
     """
-    return np.load(foo).shape[0]
+    data = np.load(foo)
+    x = data['x']
+    y = data['y']
+    if x.shape[0 ] == y.shape[0] and \
+       x.shape[1:] == ishape     and \
+       y.shape[1:] == oshape:
+        # File has multiple cases
+        return x.shape[0]
+    else:
+        # File has a single case
+        if x.shape != ishape:
+            # Shapes don't match
+            raise ValueError("This file has improperly shaped input data:\n"+\
+                             foo+ "\nExpected shape: " +\
+                             str(ishape) + "\nReceived shape: " + str(x.shape))
+        elif y.shape != oshape:
+            raise ValueError("This file has improperly shaped output data:\n"+\
+                             foo+ "\nExpected shape: " +\
+                             str(oshape) + "\nReceived shape: " + str(y.shape))
+        else:
+            raise ValueError("The inputs and outputs of this file do not "+\
+                             "have the same number of cases:\n" + foo     +\
+                             "\nInput  shape: "+str(x.shape)+
+                             "\nOutput shape: "+str(y.shape))
 
 
-def data_set_size(foos, ncores=1):
+def data_set_size(foos, ishape, oshape, ncores=1):
     """
     Loads a data set and counts the total number of cases.
 
@@ -123,15 +266,17 @@ def data_set_size(foos, ncores=1):
     -----
     It is assumed that each case in the data set occurs along axis 0.
     """
-    pool   = mp.Pool(ncores)
+    # Create counter function
+    fcount = functools.partial(count_cases, ishape=ishape, oshape=oshape)
+    pool = mp.Pool(ncores)
     # Count all cases in each file, in parallel
-    ncases = pool.map(count_cases, foos)
+    ncases = pool.map(fcount, foos)
     pool.close()
     pool.join()
     return np.sum(ncases)
 
 
-def concatdat(xi, xlen, yi, ylen, 
+def concatdat(xi, xlen, yi, ylen,
               arr1, arr2):
     """
     Helper function to handle slicing and concatenation of non-contiguous data.
@@ -143,7 +288,7 @@ def concatdat(xi, xlen, yi, ylen,
     xlen: array-like. Holds the length of slices. Must be same shape as `xi`.
     yi  : array-like. Holds the starting indices for slices.
     ylen: array-like. Holds the length of slices. Must be same shape as `yi`.
-    arr1: array-like. Data to be sliced according to `xi`,     `xlen`, 
+    arr1: array-like. Data to be sliced according to `xi`,     `xlen`,
                                                      `yi`, and `ylen`.
     arr2: array-like. Data related to `arr1`.
 
@@ -263,7 +408,7 @@ def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def make_TFRecord(fname, files, inD, ilog, olog, 
+def make_TFRecord(fname, files, ilog, olog,
                   batch_size, e_batches, split=1, verb=1):
     """
     Function to write TFRecords for large data sets.
@@ -272,12 +417,11 @@ def make_TFRecord(fname, files, inD, ilog, olog,
     ------
     fname: string. Base name for TFRecords files
     files: list, strings. Files to process into TFRecords.
-    inD  : int. Dimension of the inputs/features
     ilog : bool. Determines if to take the log of inputs/features
     olog : bool. Determines if to take the log of outputs/targets
     batch_size: int. Size of batches for training.
     e_batches : int. Expected number of batches to be processed.
-    split: int. Determines the number of `files` to process before 
+    split: int. Determines the number of `files` to process before
                 starting a new TFRecords file.
     verb : int. Verbosity level.
 
@@ -285,7 +429,7 @@ def make_TFRecord(fname, files, inD, ilog, olog,
     -------
     TFRecords files.
     """
-    if verb > 1:
+    if verb >= 1:
         print("\nWriting TFRecords file...")
 
     # Track number of files left to load
@@ -297,10 +441,14 @@ def make_TFRecord(fname, files, inD, ilog, olog,
     for i in range(int(np.ceil(len(files)/split))):
         # TFRecords file
         thisfile = fname.replace('.tfrecords', '_'+str(i).zfill(3)+'.tfrecords')
-        writer = tf.python_io.TFRecordWriter(thisfile)
+        writer = tf.io.TFRecordWriter(thisfile)
         for j in range(min(split, filesleft)):
             # Load file
-            x, y = L.load_data_file(files[i*split+j], inD, ilog, olog)
+            x, y = L.load_data_file(files[i*split+j], ilog, olog)
+            if x.shape[0] != y.shape[0]:
+                raise ValueError("The inputs and outputs of this file do not "+\
+                                 "have the same number of cases:\n"           +\
+                                 files[i*split+j])
             filesleft -= 1
             # Print progress updates
             if verb:
@@ -310,17 +458,15 @@ def make_TFRecord(fname, files, inD, ilog, olog,
             for k in range(x.shape[0]):
                 # Check for Nans
                 if np.any(np.isnan(x[k])) or np.any(np.isnan(y[k])):
-                    if verb:
-                        print("Nan alert!", files[i*split+j], k)
-                    continue
+                    print("NaN alert!", files[i*split+j], k)
+                    sys.exit()
                 # Define feature
-                feature = {'x' : _bytes_feature(
-                                        tf.compat.as_bytes(x[k].tostring())),
-                           'y' : _bytes_feature(
-                                        tf.compat.as_bytes(y[k].tostring()))}
+                feature = {'x'  : _bytes_feature(
+                                        tf.compat.as_bytes(x[k].flatten().tostring())),
+                           'y'  : _bytes_feature(
+                                        tf.compat.as_bytes(y[k].flatten().tostring()))}
                 # Create an example protocol buffer
-                example = tf.train.Example(features=tf.train.Features(feature=
-                                                                      feature))
+                example = tf.train.Example(features=tf.train.Features(feature=feature))
                 # Serialize to string and write on the file
                 writer.write(example.SerializeToString())
                 # Make sure that the TFRecord has exactly N*batch_size entries
@@ -347,18 +493,18 @@ def make_TFRecord(fname, files, inD, ilog, olog,
     return
 
 
-def _parse_function(proto, xlen, ylen, 
-                    x_mean=None, x_std=None, y_mean=None, y_std=None, 
-                    x_min=None,  x_max=None, y_min=None,  y_max=None, 
+def _parse_function(proto, ishape, oshape,
+                    x_mean=None, x_std=None, y_mean=None, y_std=None,
+                    x_min=None,  x_max=None, y_min=None,  y_max=None,
                     scalelims=None):
     """
     Helper function for loading TFRecords
-    
+
     Inputs
     ------
     proto : object. Tensorflow Dataset.
-    xlen  : int.    Number of inputs.
-    ylen  : int.    Number of outputs.
+    ishape: tuple, ints. Shape of the input  data.
+    oshape: tuple, ints. Shape of the output data.
     x_mean: array.  Mean  values of input  data.
     x_std : array.  Stdev values of input  data.
     y_mean: array.  Mean  values of output data.
@@ -375,19 +521,19 @@ def _parse_function(proto, xlen, ylen,
     y: Parsed outputs.
     """
     # Define the TFRecord
-    keys_to_features = {"x" : tf.FixedLenFeature([], tf.string),
-                        "y" : tf.FixedLenFeature([], tf.string)}
-    
+    keys_to_features = {"x" : tf.io.FixedLenFeature([], tf.string),
+                        "y" : tf.io.FixedLenFeature([], tf.string)}
+
     # Load one example
-    parsed_features = tf.parse_single_example(proto, keys_to_features)
+    parsed_features = tf.io.parse_single_example(proto, keys_to_features)
 
     # Turn string into array
-    x = tf.decode_raw(parsed_features["x"], tf.float64)
-    y = tf.decode_raw(parsed_features["y"], tf.float64)
+    x = tf.io.decode_raw(parsed_features["x"], tf.float64)
+    y = tf.io.decode_raw(parsed_features["y"], tf.float64)
 
     # Make sure it has the right shape
-    x = tf.reshape(x, (np.sum(xlen),))
-    y = tf.reshape(y, (np.sum(ylen),))
+    x = tf.reshape(x, ishape)
+    y = tf.reshape(y, oshape)
 
     # Parameters to process data
     norm    = (x_mean, x_std, y_mean, y_std)
@@ -415,10 +561,10 @@ def _parse_function(proto, xlen, ylen,
     return x, y
 
 
-def load_TFdataset(files, ncores, batch_size, buffer_size, 
-                   xlen, ylen, 
+def load_TFdataset(files, ncores, batch_size, buffer_size,
+                   ishape, oshape,
                    x_mean=None, x_std=None, y_mean=None, y_std=None,
-                   x_min=None,  x_max=None, y_min=None,  y_max=None, 
+                   x_min=None,  x_max=None, y_min=None,  y_max=None,
                    scalelims=None, shuffle=False):
     """
     Builds data loading pipeline for TFRecords.
@@ -429,8 +575,8 @@ def load_TFdataset(files, ncores, batch_size, buffer_size,
     ncores     : int. Number of cores to use for parallel loading.
     batch_size : int. Batch size.
     buffer_size: int. Number of times `batch_size` to use for buffering.
-    xlen       : int. Number of inputs.
-    ylen       : int. Number of outputs.
+    ishape: tuple, ints. Shape of the input  data.
+    oshape: tuple, ints. Shape of the output data.
     x_mean     : float.  Mean of inputs.
     x_std      : float.  Standard deviation of inputs.
     y_mean     : float.  Mean of outputs.
@@ -449,29 +595,102 @@ def load_TFdataset(files, ncores, batch_size, buffer_size,
     """
     # Make dataset
     dataset = tf.data.TFRecordDataset(files)
+    if shuffle:
+        # Interleaves reads from multiple files - credit: https://keras.io/examples/keras_recipes/tfrecord/
+        ignore_order = tf.data.Options()
+        ignore_order.experimental_deterministic = False
+        dataset = dataset.with_options(ignore_order)
     # Make static parse_function
-    parse_function = functools.partial(_parse_function, 
-                                       xlen=xlen, ylen=ylen, 
-                                       x_mean=x_mean, x_std=x_std, 
+    parse_function = functools.partial(_parse_function,
+                                       ishape=ishape, oshape=oshape,
+                                       x_mean=x_mean, x_std=x_std,
                                        y_mean=y_mean, y_std=y_std,
-                                       x_min=x_min,   x_max=x_max, 
-                                       y_min=y_min,   y_max=y_max, 
+                                       x_min=x_min,   x_max=x_max,
+                                       y_min=y_min,   y_max=y_max,
                                        scalelims=scalelims)
     # Maps the parser on every filepath in the array
     dataset = dataset.map(parse_function, num_parallel_calls=ncores)
     # Shuffle buffer -- train in random order
     if shuffle:
-        dataset = dataset.shuffle(buffer_size*batch_size, 
+        dataset = dataset.shuffle(buffer_size*batch_size,
                                   reshuffle_each_iteration=True)
-    dataset = dataset.batch(batch_size, drop_remainder=False)
-    dataset = dataset.repeat() # Go forever! Until fit() stops it
     dataset = dataset.prefetch(buffer_size)
+    dataset = dataset.batch(batch_size, drop_remainder=False)
+    if shuffle:
+        dataset = dataset.repeat() # Go until fit() stops it
 
-    # Make iterator to handle loading the data
-    iterator = dataset.make_one_shot_iterator()
-    # Create TF representation of the iterator
-    x_data, y_data = iterator.get_next()
-
-    return x_data, y_data
+    return dataset
 
 
+def write_ordered_optuna_summary(fout, trials, optlayer, optnodes=None, nprint=-1, width=9):
+    if nprint == -1:
+        nprint = len(trials)
+    minvalloss = np.zeros(len(trials))
+    maxlayers = len(optlayer)
+    for i,trial in enumerate(trials):
+        if trial.values is not None:
+            minvalloss[i] = trial.values[0]
+        else:
+            minvallloss[i] = np.inf # Model was not trained
+        #maxlayers = max(maxlayers, trial.params['layers'])
+    iorder = np.argsort(minvalloss)
+    nrank = len(str(nprint))
+    hdr = "|".join(["#".center(nrank)] + \
+                   [("Layer "+str(i+1)).center(width) for i in range(maxlayers)] + \
+                   ["Min. val. loss"])
+    div = "+".join(['-'*nrank] + \
+                   ['-'*width for _ in range(maxlayers)] + \
+                   ['-'*14])
+    with open(fout, "w") as foo:
+        foo.write(hdr + "\n")
+        foo.write(div + "\n")
+    for rank,i in enumerate(iorder[:nprint][::-1]):
+        trialrank = str(nprint-rank).rjust(nrank)
+        layers = []
+        nodes  = []
+        acts   = []
+        actpar = []
+        for j in range(maxlayers):
+            if optnodes is not None:
+                layers.append(optlayer[j])
+                if optlayer[j] not in ['flatten']:
+                    nodes.append(optnodes[j])
+                else:
+                    nodes.append("None")
+            elif "nodes_"+str(j+1) in trials[i].params.keys():
+                #if "layer_"+str(j+1) in trials[i].params.keys():
+                #    layers.append(trials[i].params["layer_"+str(j+1)])
+                #else:
+                #    layers.append('dense') #replace with parameter from trial when comparing dense and conv layers
+                layers.append(optlayer[j])
+                nodes.append(trials[i].params["nodes_"+str(j+1)])
+            else:
+                layers.append(" "*width)
+                nodes.append(" "*width)
+            if "activation_"+str(j+1) in trials[i].params.keys():
+                acts.append(trials[i].params["activation_"+str(j+1)])
+            else:
+                acts.append(" "*width)
+            if "act_val_"+str(j+1) in trials[i].params.keys():
+                actpar.append("{:.{}f}".format(trials[i].params["act_val_"+str(j+1)], width-4))
+            else:
+                actpar.append(" "*width)
+        line1 = "|".join([trialrank] + \
+                         [lay.center(width) for lay in layers] + \
+                         ["{:.6e}".format(trials[i].values[0])])
+        line2 = "|".join([" "*nrank] + \
+                         [str(n).center(width) for n in nodes] + \
+                         [" "])
+        line3 = "|".join([" "*nrank] + \
+                         [act.center(width) for act in acts] + \
+                         [" "])
+        line4 = "|".join([" "*nrank] + \
+                         [aval.center(width) for aval in actpar] + \
+                         [" "])
+        with open(fout, "a") as foo:
+            foo.write(line1 + "\n")
+            foo.write(line2 + "\n")
+            foo.write(line3 + "\n")
+            foo.write(line4 + "\n")
+            foo.write(div   + "\n")
+    return

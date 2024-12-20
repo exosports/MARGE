@@ -20,7 +20,9 @@ other callbacks to enable the resumption of training.
 import sys, os
 import time
 import signal
-from keras.callbacks import *
+import numpy as np
+from tensorflow.keras.callbacks import *
+import tensorflow.keras.backend as K
 import pickle
 import glob
 
@@ -111,6 +113,9 @@ class CyclicLR(Callback):
                 #self.scale_fn   = lambda x: gamma**(x)
                 self.scale_fn   = self.exp_range
                 self.scale_mode = 'iterations'
+            else:
+                raise ValueError("Unknown CLR mode provided.\nGiven: "+self.mode+\
+                                 "\nOptions: triangular, triangular2, exp_range")
         else:
             self.scale_fn   = scale_fn
             self.scale_mode = scale_mode
@@ -155,9 +160,9 @@ class CyclicLR(Callback):
         logs = logs or {}
 
         if self.clr_iterations == 0:
-            K.set_value(self.model.optimizer.lr, self.base_lr)
+            self.model.optimizer.learning_rate.assign(np.asarray(self.base_lr, dtype=self.model.optimizer.learning_rate.dtype))
         else:
-            K.set_value(self.model.optimizer.lr, self.clr())        
+            self.model.optimizer.learning_rate.assign(np.asarray(self.clr(), dtype=self.model.optimizer.learning_rate.dtype))
             
     def on_batch_end(self, epoch, logs=None):
         
@@ -166,13 +171,13 @@ class CyclicLR(Callback):
         self.clr_iterations += 1
 
         self.history.setdefault('lr', []).append(
-                                          K.get_value(self.model.optimizer.lr))
+                                          K.get_value(self.model.optimizer.learning_rate))
         self.history.setdefault('iterations', []).append(self.trn_iterations)
 
         for k, v in logs.items():
             self.history.setdefault(k, []).append(v)
         
-        K.set_value(self.model.optimizer.lr, self.clr())
+        self.model.optimizer.learning_rate.assign(np.asarray(self.clr(), dtype=self.model.optimizer.learning_rate.dtype))
 
 
 class SignalStopping(Callback):

@@ -79,12 +79,12 @@ def loss(nn, plotdir, fname='history_train_val_loss.png', resume=False):
     """
     tr_loss  = nn.historyNN.history['loss']
     val_loss = nn.historyNN.history['val_loss']
-    min_loss = min(np.nanmin( tr_loss), 
+    min_loss = min(np.nanmin( tr_loss),
                    np.nanmin(val_loss))
 
     plt.figure()
     plt.title('Model Loss History')
-    # Training loss is at 1/2 the epoch, 
+    # Training loss is at 1/2 the epoch,
     # while val loss is at the end of the epoch
     plt.plot(np.arange(len(tr_loss ))+0.5, tr_loss,  label='train')
     plt.plot(np.arange(len(val_loss))+1.0, val_loss, label='val')
@@ -115,7 +115,7 @@ def loss(nn, plotdir, fname='history_train_val_loss.png', resume=False):
         plt.close()
 
 
-def pred_vs_true(fpred_mean, fy_test_un, 
+def pred_vs_true(fpred_mean, fy_test_un,
                  names, plotdir):
     """
     Plots mean predictions for all cases vs. the true values.
@@ -155,7 +155,7 @@ def pred_vs_true(fpred_mean, fy_test_un,
         plt.scatter(y_test_un[:, p],
                     pred_mean[:, p],
                     s=10, alpha=0.6)
-        # MSE: 
+        # MSE:
         MSE = np.mean((y_test_un[:, p] -
                        pred_mean[:, p])**2)
         sig = np.std ((y_test_un[:, p] -
@@ -175,8 +175,8 @@ def pred_vs_true(fpred_mean, fy_test_un,
     return np.asarray(R2)
 
 
-def plot_spec(fname, predspec, truespec=None, 
-              xvals=None, xlabel=None, ylabel=None):
+def plot_spec(fname, predspec, truespec=None,
+              xvals=None, xlabel=None, ylabel=None, smoothing=0):
     """
     Plots the predicted spectrum, vs the known spectrum if supplied.
 
@@ -212,26 +212,28 @@ def plot_spec(fname, predspec, truespec=None,
     plt.ylabel(u''+ylabel, fontsize=12)
     if truespec is not None:
         plt.plot(xvals, truespec, label='True', lw=0.5, alpha=trans, c='r')
-        predsmooth = ss.savgol_filter(predspec, 101, 3)
-        plt.plot(xvals, predsmooth, c='navy', 
-                 label='Predicted, smoothed', ls='--', lw=0.5, alpha=trans)
-        truesmooth = ss.savgol_filter(truespec, 101, 3)
-        plt.plot(xvals, truesmooth, c='maroon', 
-                 label='True, smoothed', ls='--', lw=0.5, alpha=trans)
+        if smoothing:
+            predsmooth = ss.savgol_filter(predspec, smoothing, 3)
+            plt.plot(xvals, predsmooth, c='navy',
+                     label='Predicted, smoothed', ls='--', lw=0.5, alpha=trans)
+            truesmooth = ss.savgol_filter(truespec, smoothing, 3)
+            plt.plot(xvals, truesmooth, c='maroon',
+                     label='True, smoothed', ls='--', lw=0.5, alpha=trans)
         lgd = plt.legend(loc='best', prop={'size': 9})
         for lgdobj in lgd.legendHandles:
             lgdobj.set_linewidth(2.0)
         frame1.set_xticklabels([])
         frame2 = fig1.add_axes((.1, .1, .8, .2))
         resid       = 100 * (predspec   - truespec  ) / truespec
-        residsmooth = 100 * (predsmooth - truesmooth) / truesmooth
-        plt.scatter(xvals, resid, s=0.4, 
-                 alpha=0.7, label='Full resolution', c='b')
-        plt.scatter(xvals, residsmooth, s=0.4, 
-                 alpha=0.7, label='Smoothed',        c='r')
-        lgd = plt.legend(loc='best', prop={'size': 8})
-        for lgdobj in lgd.legendHandles:
-            lgdobj.set_sizes([16])
+        plt.scatter(xvals, resid, s=0.4,
+                    alpha=0.7, label='Full resolution', c='b')
+        if smoothing:
+            residsmooth = 100 * (predsmooth - truesmooth) / truesmooth
+            plt.scatter(xvals, residsmooth, s=0.4,
+                        alpha=0.7, label='Smoothed', c='r')
+            lgd = plt.legend(loc='best', prop={'size': 8})
+            for lgdobj in lgd.legendHandles:
+                lgdobj.set_sizes([16])
         plt.hlines(0, np.amin(xvals), np.amax(xvals))
         yticks = frame2.yaxis.get_major_ticks()
         yticks[-1].label1.set_visible(False)
@@ -242,7 +244,7 @@ def plot_spec(fname, predspec, truespec=None,
 
     if truespec is not None:
         frame3 = fig1.add_axes((0.9, .1, .1, .2))
-        plt.hist(resid[np.abs(resid)!=np.inf], bins=60, density=True, 
+        plt.hist(resid[np.abs(resid)!=np.inf], bins=60, density=True,
                  orientation="horizontal")
         plt.xlabel('PDF', fontsize=12)
         plt.ylim(*ylims)
@@ -276,5 +278,3 @@ def plot(fname, xvals, yvals, xlabel, ylabel):
     plt.ylabel(ylabel)
     plt.savefig(fname, bbox_inches='tight', dpi=600)
     plt.close()
-
-

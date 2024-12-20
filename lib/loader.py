@@ -3,7 +3,7 @@ Module that contains functions related to loading/reading files.
 
 load_data_file: Loads a given .NPY file.
 
-load_activations: Takes the user-specified parameters and loads the 
+load_activations: Takes the user-specified parameters and loads the
                   activation object.
 
 """
@@ -11,19 +11,18 @@ load_activations: Takes the user-specified parameters and loads the
 import sys, os
 import numpy as np
 
-import keras
-from keras import backend as K
-from keras.layers import ReLU, LeakyReLU, ELU, Softmax
+import tensorflow.keras as keras
+K = keras.backend
+from tensorflow.keras.layers import ReLU, LeakyReLU, ELU, Softmax
 
 
-def load_data_file(data_file, inD, ilog=False, olog=False):
+def load_data_file(data_file, ilog=False, olog=False):
     """
     Loads a given .NPY file.
 
     Inputs
     ------
     data_file: string. .NPY file to load
-    inD      : int.    Dimension of inputs.
     ilog     : bool.   Determines whether to take the log of inputs  or not.
     olog     : bool.   Determines whether to take the log of outputs or not.
 
@@ -35,25 +34,20 @@ def load_data_file(data_file, inD, ilog=False, olog=False):
     """
     # Load file
     data = np.load(data_file)
-    
-    # Ensure 2D
-    if data.ndim == 1:
-        data = data[None, :]
-    elif data.ndim >= 3:
-        raise ValueError("Data file has 3+ dimensions, but loader.py is not " +\
-                         "written to handle this\nsituation.  Ensure a 2D "   +\
-                         "shape, or code in support for 3+ dimensions and\n"  +\
-                         "submit a pull request.")
+    x = data['x']
+    y = data['y']
 
-    # Slice inputs/outputs
-    x = data[:, :inD]
-    y = data[:, inD:]
+    # Ensure at least 2D
+    if x.ndim == 1:
+        x = x[None, :]
+    if y.ndim == 1:
+        y = y[None, :]
 
     # Take log10 as needed
     if ilog:
-        x[:, ilog] = np.log10(x[:, ilog])
+        x[..., ilog] = np.log10(x[..., ilog])
     if olog:
-        y[:, olog] = np.log10(y[:, olog])
+        y[..., olog] = np.log10(y[..., olog])
 
     return x, y
 
@@ -76,17 +70,17 @@ def load_activation(act_str, act_par):
     elif act_str == 'sig':
         activation = 'sigmoid'
     elif act_str == 'relu':
-        if act_par == 'None':
+        if act_par in [None, 'None']:
             activation = ReLU() #default: no max
         else:
             activation = ReLU(float(act_par))
     elif act_str == 'leakyrelu':
-        if act_par == 'None':
+        if act_par in [None, 'None']:
             activation = LeakyReLU() #default: 0.3
         else:
             activation = LeakyReLU(float(act_par))
     elif act_str == 'elu':
-        if act_par == 'None':
+        if act_par in [None, 'None']:
             activation = ELU() #default: 0.1
         else:
             activation = ELU(float(act_par))

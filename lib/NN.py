@@ -3,7 +3,7 @@ Contains classes/functions related to NN models.
 
 NNModel: class that builds out a specified NN.
 
-driver: function that handles data & model initialization, and 
+driver: function that handles data & model initialization, and
         trains/validates/tests the model.
 
 """
@@ -12,9 +12,9 @@ import sys, os, platform
 import warnings
 import time
 import random
-from io import StringIO
 import glob
 import pickle
+import functools
 
 import numpy as np
 import matplotlib as mpl
@@ -25,25 +25,40 @@ import matplotlib.pyplot as plt
 
 from sklearn import metrics
 
-# Keras
-import keras
-from keras import backend as K
-from keras.models  import Sequential, Model
-from keras.metrics import binary_accuracy
-from keras.layers  import (Input, Convolution1D, Dense, Reshape,
-                           MaxPooling1D, AveragePooling1D, Dropout, Flatten,  
-                           Lambda, Wrapper, merge, concatenate)
-from keras.engine  import InputSpec
-#from keras.layers.core  import Dense, Dropout, Activation, Layer, Lambda, Flatten
-from keras.regularizers import l2
-from keras.optimizers   import RMSprop, Adadelta, adam
-from keras import initializers
 import tensorflow as tf
+# Keras
+import tensorflow.keras as keras
+K = keras.backend
+from tensorflow.keras.models  import Sequential, Model
+from tensorflow.keras.metrics import binary_accuracy
+from tensorflow.keras.layers  import (Input, InputSpec, Dense, Reshape,
+                           Convolution1D,    Convolution2D,    Convolution3D,
+                           Convolution2DTranspose, Convolution3DTranspose, 
+                           MaxPooling1D,     MaxPooling2D,     MaxPooling3D,
+                           AveragePooling1D, AveragePooling2D, AveragePooling3D,
+                           Dropout, Flatten, Lambda, Layer, Wrapper, concatenate)
+from tensorflow.keras.regularizers import l1, l2, l1_l2
+from tensorflow.keras.optimizers   import RMSprop, Adadelta, Adam
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import sparse_tensor
+from tensorflow.python.framework import tensor_shape
+from tensorflow.keras import constraints
+from tensorflow.keras import initializers
+from tensorflow.keras import activations as tfactivations
+from tensorflow.keras import regularizers
+from tensorflow.python.ops import gen_math_ops
+from tensorflow.python.ops import nn_ops
 from tensorflow.python import debug as tf_debug
+#from tensorflow.python.framework.ops import disable_eager_execution
 
-import onnx
-import keras2onnx
-from   onnx2keras import onnx_to_keras
+#disable_eager_execution()
+
+import optuna
+import dask.distributed
+
+#import onnx
+#import keras2onnx
+#from   onnx2keras import onnx_to_keras
 
 import callbacks as C
 import loader    as L
@@ -54,6 +69,497 @@ import stats     as S
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 
+class ConcreteDropout(Layer):
+  """Just your regular densely-connected NN layer, 
+     plus a trainable dropout parameter.
+
+  `Dense` implements the operation:
+  `output = activation(dot(input, kernel) + bias)`
+  where `activation` is the element-wise activation function
+  passed as the `activation` argument, `kernel` is a weights matrix
+  created by the layer, and `bias` is a bias vector created by the layer
+  (only applicable if `use_bias` is `True`). These are all attributes of
+  `Dense`.
+
+  Note: If the input to the layer has a rank greater than 2, then `Dense`
+  computes the dot product between the `inputs` and the `kernel` along the
+  last axis of the `inputs` and axis 0 of the `kernel` (using `tf.tensordot`).
+  For example, if input has dimensions `(batch_size, d0, d1)`,
+  then we create a `kernel` with shape `(d1, units)`, and the `kernel` operates
+  along axis 2 of the `input`, on every sub-tensor of shape `(1, 1, d1)`
+  (there are `batch_size * d0` such sub-tensors).
+  The output in this case will have shape `(batch_size, d0, units)`.
+
+  Besides, layer attributes cannot be modified after the layer has been called
+  once (except the `trainable` attribute).
+  When a popular kwarg `input_shape` is passed, then keras will create
+  an input layer to insert before the current layer. This can be treated
+  equivalent to explicitly defining an `InputLayer`.
+
+  Example:
+
+  >>> # Create a `Sequential` model and add a Dense layer as the first layer.
+  >>> model = tf.keras.models.Sequential()
+  >>> model.add(tf.keras.Input(shape=(16,)))
+  >>> model.add(tf.keras.layers.Dense(32, activation='relu'))
+  >>> # Now the model will take as input arrays of shape (None, 16)
+  >>> # and output arrays of shape (None, 32).
+  >>> # Note that after the first layer, you don't need to specify
+  >>> # the size of the input anymore:
+  >>> model.add(tf.keras.layers.Dense(32))
+  >>> model.output_shape
+  (None, 32)
+
+  Args:
+    units: Positive integer, dimensionality of the output space.
+    activation: Activation function to use.
+      If you don't specify anything, no activation is applied
+      (ie. "linear" activation: `a(x) = x`).
+    use_bias: Boolean, whether the layer uses a bias vector.
+    kernel_initializer: Initializer for the `kernel` weights matrix.
+    bias_initializer: Initializer for the bias vector.
+    kernel_regularizer: Regularizer function applied to
+      the `kernel` weights matrix.
+    bias_regularizer: Regularizer function applied to the bias vector.
+    activity_regularizer: Regularizer function applied to
+      the output of the layer (its "activation").
+    kernel_constraint: Constraint function applied to
+      the `kernel` weights matrix.
+    bias_constraint: Constraint function applied to the bias vector.
+
+  Input shape:
+    N-D tensor with shape: `(batch_size, ..., input_dim)`.
+    The most common situation would be
+    a 2D input with shape `(batch_size, input_dim)`.
+
+  Output shape:
+    N-D tensor with shape: `(batch_size, ..., units)`.
+    For instance, for a 2D input with shape `(batch_size, input_dim)`,
+    the output would have shape `(batch_size, units)`.
+  """
+
+  def __init__(self,
+               units,
+               activation=None,
+               use_bias=True,
+               kernel_initializer='glorot_uniform',
+               bias_initializer='zeros',
+               kernel_regularizer=None,
+               bias_regularizer=None,
+               activity_regularizer=None,
+               weight_regularizer=None,
+               dropout_regularizer=None,
+               kernel_constraint=None,
+               bias_constraint=None,
+               is_mc_dropout=True, 
+               init_min=0.1, 
+               init_max=0.1, 
+               **kwargs):
+    super(ConcreteDropout, self).__init__(
+        activity_regularizer=activity_regularizer, **kwargs)
+        
+    self.units = int(units) if not isinstance(units, int) else units
+    if self.units < 0:
+      raise ValueError(f'Received an invalid value for `units`, expected '
+                       f'a positive integer, got {units}.')
+    self.activation = tfactivations.get(activation)
+    self.use_bias = use_bias
+    self.kernel_initializer = initializers.get(kernel_initializer)
+    self.bias_initializer = initializers.get(bias_initializer)
+    self.kernel_regularizer = regularizers.get(kernel_regularizer)
+    self.bias_regularizer = regularizers.get(bias_regularizer)
+    self.weight_regularizer = weight_regularizer
+    self.dropout_regularizer = dropout_regularizer
+    self.kernel_constraint = constraints.get(kernel_constraint)
+    self.bias_constraint = constraints.get(bias_constraint)
+    self.is_mc_dropout = is_mc_dropout
+    
+    self.input_spec = InputSpec(min_ndim=2)
+    self.supports_masking = True
+    
+    self.p_logit = None
+    self.init_min = np.log(init_min) - np.log(1. - init_min)
+    self.init_max = np.log(init_max) - np.log(1. - init_max)
+    
+  def build(self, input_shape):
+    dtype = dtypes.as_dtype(self.dtype or K.floatx())
+    if not (dtype.is_floating or dtype.is_complex):
+      raise TypeError('Unable to build `Dense` layer with non-floating point '
+                      'dtype %s' % (dtype,))
+
+    input_shape = tensor_shape.TensorShape(input_shape)
+    last_dim = tensor_shape.dimension_value(input_shape[-1])
+    if last_dim is None:
+      raise ValueError('The last dimension of the inputs to `Dense` '
+                       'should be defined. Found `None`.')
+    self.input_spec = InputSpec(min_ndim=2, axes={-1: last_dim})
+    self.kernel = self.add_weight(
+        name='kernel',
+        shape=(last_dim, self.units),
+        initializer=self.kernel_initializer,
+        regularizer=self.kernel_regularizer,
+        constraint=self.kernel_constraint,
+        dtype=self.dtype,
+        trainable=True)
+    if self.use_bias:
+      self.bias = self.add_weight(
+          name='bias',
+          shape=(self.units,),
+          initializer=self.bias_initializer,
+          regularizer=self.bias_regularizer,
+          constraint=self.bias_constraint,
+          dtype=self.dtype,
+          trainable=True)
+    else:
+      self.bias = None
+    self.p_logit = self.add_weight(name='p_logit',
+                                   shape=(1,),
+                                   initializer=tf.random_uniform_initializer(self.init_min, self.init_max),
+                                   dtype=tf.dtypes.float32,
+                                   trainable=True)
+    self.built = True
+  
+  def concrete_dropout(self, x, p):
+        """
+        Concrete dropout - used at training time (gradients can be propagated)
+        :param x: input
+        :return:  approx. dropped out input
+        """
+        eps = 1e-07
+        temp = 0.1
+
+        unif_noise = tf.random.uniform(shape=tf.shape(x))
+        drop_prob = (
+            tf.math.log(p + eps)
+            - tf.math.log(1. - p + eps)
+            + tf.math.log(unif_noise + eps)
+            - tf.math.log(1. - unif_noise + eps)
+        )
+        drop_prob = tf.math.sigmoid(drop_prob / temp)
+        random_tensor = 1. - drop_prob
+
+        retain_prob = 1. - p
+        x *= random_tensor
+        x /= retain_prob
+        return x
+
+  def call(self, inputs):
+    # Apply dropout
+    p = tf.math.sigmoid(self.p_logit)
+    input_dim = int(inputs.shape[-1])
+    weight = self.kernel
+    kernel_regularizer = self.weight_regularizer * tf.reduce_sum(tf.square(weight)) / (1. - p)
+    dropout_regularizer = p * tf.math.log(p) + (1. - p) * tf.math.log(1. - p)
+    dropout_regularizer *= self.dropout_regularizer * input_dim
+    regularizer = tf.reduce_sum(kernel_regularizer + dropout_regularizer)
+    #if self.is_mc_dropout:
+    inputs = self.concrete_dropout(inputs, p)
+    
+    # Now apply normal Dense calculations
+    if self._dtype_policy.compute_dtype:
+      if inputs.dtype.base_dtype != dtypes.as_dtype(self._dtype_policy.compute_dtype):
+        inputs = math_ops.cast(inputs, dtype=dtypes.as_dtype(self._dtype_policy.compute_dtype))
+
+    rank = inputs.shape.rank
+    if rank == 2 or rank is None:
+      # We use embedding_lookup_sparse as a more efficient matmul operation for
+      # large sparse input tensors. The op will result in a sparse gradient, as
+      # opposed to sparse_ops.sparse_tensor_dense_matmul which results in dense
+      # gradients. This can lead to sigfinicant speedups, see b/171762937.
+      if isinstance(inputs, sparse_tensor.SparseTensor):
+        # We need to fill empty rows, as the op assumes at least one id per row.
+        inputs, _ = sparse_ops.sparse_fill_empty_rows(inputs, 0)
+        # We need to do some munging of our input to use the embedding lookup as
+        # a matrix multiply. We split our input matrix into separate ids and
+        # weights tensors. The values of the ids tensor should be the column
+        # indices of our input matrix and the values of the weights tensor
+        # can continue to the actual matrix weights.
+        # The column arrangement of ids and weights
+        # will be summed over and does not matter. See the documentation for
+        # sparse_ops.sparse_tensor_dense_matmul a more detailed explanation
+        # of the inputs to both ops.
+        ids = sparse_tensor.SparseTensor(
+            indices=inputs.indices,
+            values=inputs.indices[:, 1],
+            dense_shape=inputs.dense_shape)
+        weights = inputs
+        outputs = embedding_ops.embedding_lookup_sparse_v2(
+            self.kernel, ids, weights, combiner='sum')
+      else:
+        outputs = gen_math_ops.MatMul(a=inputs, b=self.kernel)
+    # Broadcast kernel to inputs.
+    else:
+      outputs = standard_ops.tensordot(inputs, self.kernel, [[rank - 1], [0]])
+      # Reshape the output back to the original ndim of the input.
+      if not context.executing_eagerly():
+        shape = inputs.shape.as_list()
+        output_shape = shape[:-1] + [self.kernel.shape[-1]]
+        outputs.set_shape(output_shape)
+
+    if self.use_bias:
+      outputs = nn_ops.bias_add(outputs, self.bias)
+
+    if self.activation is not None:
+      outputs = self.activation(outputs)
+    
+    return outputs, regularizer
+
+  def compute_output_shape(self, input_shape):
+    input_shape = tensor_shape.TensorShape(input_shape)
+    input_shape = input_shape.with_rank_at_least(2)
+    if tensor_shape.dimension_value(input_shape[-1]) is None:
+      raise ValueError(
+          'The innermost dimension of input_shape must be defined, but saw: %s'
+          % (input_shape,))
+    return input_shape[:-1].concatenate(self.units)
+
+  def get_config(self):
+    config = super(ConcreteDropout, self).get_config()
+    config.update({
+        'units': self.units,
+        'activation': tfactivations.serialize(self.activation),
+        'use_bias': self.use_bias,
+        'kernel_initializer': initializers.serialize(self.kernel_initializer),
+        'bias_initializer': initializers.serialize(self.bias_initializer),
+        'kernel_regularizer': regularizers.serialize(self.kernel_regularizer),
+        'bias_regularizer': regularizers.serialize(self.bias_regularizer),
+        'activity_regularizer':
+            regularizers.serialize(self.activity_regularizer),
+        'kernel_constraint': constraints.serialize(self.kernel_constraint),
+        'bias_constraint': constraints.serialize(self.bias_constraint)
+    })
+    return config
+
+
+class ConcreteDropoutImpl(Wrapper):
+    """From https://github.com/yaringal/ConcreteDropout
+    with modifications from https://github.com/deepskies/deeplyuncertain-public/blob/main/models/cd.py
+    
+    This wrapper allows to learn the dropout probability for any given input 
+       Dense layer.
+    ```python
+        # as the first layer in a model
+        model = Sequential()
+        model.add(ConcreteDropout(Dense(8), input_shape=(16)))
+        # now model.output_shape == (None, 8)
+        # subsequent layers: no need for input_shape
+        model.add(ConcreteDropout(Dense(32)))
+        # now model.output_shape == (None, 32)
+    ```
+    `ConcreteDropout` can be used with arbitrary layers which have 2D
+    kernels, not just `Dense`. However, Conv2D layers require different
+    weighing of the regulariser (use SpatialConcreteDropout instead).
+    # Arguments
+        layer: a layer instance.
+        weight_regularizer:
+            A positive number which satisfies
+                $weight_regularizer = l**2 / (\tau * N)$
+            with prior lengthscale l, 
+            model precision $\\tau$ (inverse observation noise),
+            and N the number of instances in the dataset.
+            Note that kernel_regularizer is not needed.
+        dropout_regularizer:
+            A positive number which satisfies
+                $dropout_regularizer = 2 / (\\tau * N)$
+            with model precision $\tau$ (inverse observation noise) and N the 
+            number of instances in the dataset.
+            Note relation between dropout_regularizer and weight_regularizer:
+                $weight_regularizer / dropout_regularizer = l**2 / 2$
+            with prior lengthscale l. Note also that the factor of two should be
+            ignored for cross-entropy loss, and used only for the eculedian loss
+    """
+
+    def __init__(self, layer, weight_regularizer=1e-6, dropout_regularizer=1e-5,
+                 init_min=0.1, init_max=0.1, is_mc_dropout=True, **kwargs):
+        assert 'kernel_regularizer' not in kwargs
+        super(ConcreteDropout, self).__init__(layer, **kwargs)
+        self.weight_regularizer  = weight_regularizer
+        self.dropout_regularizer = dropout_regularizer
+        self.is_mc_dropout       = is_mc_dropout
+        self.supports_masking    = True
+        self.p_logit             = None
+        self.init_min            = np.log(init_min) - np.log(1. - init_min)
+        self.init_max            = np.log(init_max) - np.log(1. - init_max)
+        
+    def build(self, input_shape=None):
+        self.input_spec = InputSpec(shape=input_shape)
+        if not self.layer.built:
+            self.layer.build(input_shape)
+            self.layer.built = True
+        self.built = True
+        super(ConcreteDropout, self).build()
+
+        # initialise p
+        """self.p_logit = self.layer.add_weight(
+                                      name='p_logit',
+                                      shape=(1,),
+                                      initializer=initializers.RandomUniform(self.init_min, self.init_max),
+                                      dtype=tf.dtypes.float32,
+                                      trainable=True)"""
+        
+    def compute_output_shape(self, input_shape):
+        return self.layer.compute_output_shape(input_shape)
+
+    def concrete_dropout(self, x, p):
+        '''
+        Concrete dropout - used at training time (gradients can be propagated)
+        :param x: input
+        :return:  approx. dropped out input
+        '''
+        eps  = K.cast_to_floatx(K.epsilon())
+        temp = 0.1
+
+        unif_noise = K.random_uniform(shape=K.shape(x))
+        drop_prob = (
+            K.log(p + eps)
+            - K.log(1. - p + eps)
+            + K.log(unif_noise + eps)
+            - K.log(1. - unif_noise + eps)
+        )
+        drop_prob = K.sigmoid(drop_prob / temp)
+        random_tensor = 1. - drop_prob
+
+        retain_prob  = 1. - p
+        x           *= random_tensor
+        x           /= retain_prob
+        return x
+
+    def call(self, inputs, training=None):
+        p = tf.math.sigmoid(self.p_logit)
+        
+        # initialise regulariser / prior KL term
+        input_dim = int(inputs.shape[-1])  # last dim
+        weight = self.layer.kernel
+        kernel_regularizer = self.weight_regularizer * tf.reduce_sum(tf.square(weight)) / (1. - p)
+        dropout_regularizer = p * tf.math.log(p) + (1. - p) * tf.math.log(1. - p)
+        dropout_regularizer *= self.dropout_regularizer * input_dim
+        regularizer = tf.reduce_sum(kernel_regularizer + dropout_regularizer)
+        
+        if self.is_mc_dropout:
+            return self.layer.call(self.concrete_dropout(inputs, p)), regularizer
+        else:
+            def relaxed_dropped_inputs():
+                return self.layer.call(self.concrete_dropout(inputs, p)), regularizer
+            return K.in_train_phase(relaxed_dropped_inputs,
+                                    self.layer.call(inputs),
+                                    training=training), regularizer
+
+
+class SpatialConcreteDropout(Wrapper):
+    """From https://github.com/yaringal/ConcreteDropout
+    DOES NOT WORK CURRENTLY.  Needs to be updated for TFv2.
+    
+    This wrapper allows to learn the dropout probability for any given Conv2D input layer.
+    ```python
+        model = Sequential()
+        model.add(SpatialConcreteDropout(Conv2D(64, (3, 3)),
+                                  input_shape=(299, 299, 3)))
+    ```
+    # Arguments
+        layer: a layer instance.
+        weight_regularizer:
+            A positive number which satisfies
+                $weight_regularizer = l**2 / (\tau * N)$
+            with prior lengthscale l, model precision $\tau$ (inverse observation noise),
+            and N the number of instances in the dataset.
+            Note that kernel_regularizer is not needed.
+        dropout_regularizer:
+            A positive number which satisfies
+                $dropout_regularizer = 2 / (\tau * N)$
+            with model precision $\tau$ (inverse observation noise) and N the number of
+            instances in the dataset.
+            Note the relation between dropout_regularizer and weight_regularizer:
+                $weight_regularizer / dropout_regularizer = l**2 / 2$
+            with prior lengthscale l. Note also that the factor of two should be
+            ignored for cross-entropy loss, and used only for the eculedian loss.
+    """
+    def __init__(self, layer, weight_regularizer=1e-6, dropout_regularizer=1e-5,
+                 init_min=0.1, init_max=0.1, is_mc_dropout=True, data_format=None, **kwargs):
+        assert 'kernel_regularizer' not in kwargs
+        super(SpatialConcreteDropout, self).__init__(layer, **kwargs)
+        self.weight_regularizer = weight_regularizer
+        self.dropout_regularizer = dropout_regularizer
+        self.is_mc_dropout = is_mc_dropout
+        self.supports_masking = True
+        self.p_logit = None
+        self.p = None
+        self.init_min = np.log(init_min) - np.log(1. - init_min)
+        self.init_max = np.log(init_max) - np.log(1. - init_max)
+        self.data_format = 'channels_last' if data_format is None else 'channels_first'
+
+    def build(self, input_shape=None):
+        self.input_spec = InputSpec(shape=input_shape)
+        if not self.layer.built:
+            self.layer.build(input_shape)
+            self.layer.built = True
+        super(SpatialConcreteDropout, self).build()  # this is very weird.. we must call super before we add new losses
+
+        # initialise p
+        self.p_logit = self.layer.add_weight(name='p_logit',
+                                            shape=(1,),
+                                            initializer=initializers.RandomUniform(self.init_min, self.init_max),
+                                            trainable=True)
+        self.p = K.sigmoid(self.p_logit[0])
+
+        # initialise regulariser / prior KL term
+        assert len(input_shape) == 4, 'this wrapper only supports Conv2D layers'
+        if self.data_format == 'channels_first':
+            input_dim = int(input_shape[1]) # we drop only channels
+        else:
+            input_dim = int(input_shape[3])
+        
+        weight = self.layer.kernel
+        kernel_regularizer = self.weight_regularizer * K.sum(K.square(weight)) / (1. - self.p)
+        dropout_regularizer = self.p * K.log(self.p)
+        dropout_regularizer += (1. - self.p) * K.log(1. - self.p)
+        dropout_regularizer *= self.dropout_regularizer * input_dim
+        regularizer = K.sum(kernel_regularizer + dropout_regularizer)
+        self.layer.add_loss(regularizer)
+
+    def compute_output_shape(self, input_shape):
+        return self.layer.compute_output_shape(input_shape)
+
+    def spatial_concrete_dropout(self, x):
+        '''
+        Concrete dropout - used at training time (gradients can be propagated)
+        :param x: input
+        :return:  approx. dropped out input
+        '''
+        eps = K.cast_to_floatx(K.epsilon())
+        temp = 2. / 3.
+
+        input_shape = K.shape(x)
+        if self.data_format == 'channels_first':
+            noise_shape = (input_shape[0], input_shape[1], 1, 1)
+        else:
+            noise_shape = (input_shape[0], 1, 1, input_shape[3])
+        unif_noise = K.random_uniform(shape=noise_shape)
+        
+        drop_prob = (
+            K.log(self.p + eps)
+            - K.log(1. - self.p + eps)
+            + K.log(unif_noise + eps)
+            - K.log(1. - unif_noise + eps)
+        )
+        drop_prob = K.sigmoid(drop_prob / temp)
+        random_tensor = 1. - drop_prob
+
+        retain_prob = 1. - self.p
+        x *= random_tensor
+        x /= retain_prob
+        return x
+
+    def call(self, inputs, training=None):
+        if self.is_mc_dropout:
+            return self.layer.call(self.spatial_concrete_dropout(inputs))
+        else:
+            def relaxed_dropped_inputs():
+                return self.layer.call(self.spatial_concrete_dropout(inputs))
+            return K.in_train_phase(relaxed_dropped_inputs,
+                                    self.layer.call(inputs),
+                                    training=training)
+
+
 class NNModel:
     """
     Builds/trains NN model according to specified parameters.
@@ -62,25 +568,27 @@ class NNModel:
 
     train: Trains the NN model.
     """
-    
-    def __init__(self, ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                 xlen, ylen, olog, 
-                 x_mean, x_std, y_mean, y_std, 
-                 x_min,  x_max, y_min,  y_max, scalelims, 
-                 ncores, buffer_size, batch_size, nbatches, 
-                 layers, lay_params, activations, act_params, nodes, 
-                 lengthscale = 1e-3, max_lr=1e-1, 
-                 clr_mode='triangular', clr_steps=2000, 
-                 weight_file = 'weights.h5', stop_file = './STOP', 
-                 train_flag = True, 
-                 epsilon=1e-6, 
+
+    def __init__(self, ftrain_TFR, fvalid_TFR, ftest_TFR,
+                 ishape, oshape, olog,
+                 x_mean, x_std, y_mean, y_std,
+                 x_min,  x_max, y_min,  y_max, scalelims,
+                 ncores, buffer_size, batch_size, nbatches,
+                 layers, lay_params, activations, nodes,
+                 kernel_regularizer, 
+                 lossfunc, lengthscale = 1e-3, max_lr=1e-1,
+                 model_predict=None, model_evaluate=None, 
+                 clr_mode='triangular', clr_steps=2000,
+                 weight_file = 'weights.h5.keras', stop_file = './STOP',
+                 train_flag = True,
+                 epsilon=1e-6,
                  debug=False, shuffle=False, resume=False):
         """
         ftrain_TFR : list, strings. TFRecords for the training   data.
         fvalid_TFR : list, strings. TFRecords for the validation data.
         ftest_TFR  : list, strings. TFRecords for the test       data.
-        xlen       : int.   Dimensionality of the inputs.
-        ylen       : int.   Dimensionality of the outputs.
+        ishape     : tuple, ints. Shape of the input  data.
+        oshape     : tuple, ints. Shape of the output data.
         olog       : bool.  Determines if the target values are log10-scaled.
         x_mean     : array. Mean  values of the input  data.
         x_std      : array. Stdev values of the input  data.
@@ -94,22 +602,24 @@ class NNModel:
         ncores     : int. Number of cores to use for parallel data loading.
         buffer_size: int. Number of cases to pre-load in memory.
         batch_size : int. Size of batches for training/validation/testing.
-        nbatches   : list, ints. Number of batches in the 
-                                 [training, validation, test] (in that order) 
+        nbatches   : list, ints. Number of batches in the
+                                 [training, validation, test] (in that order)
                                  sets.
         layers     : list, str.  Types of hidden layers.
-        lay_params : list, ints. Parameters for the layer type 
+        lay_params : list, ints. Parameters for the layer type
                                  E.g., kernel size
         activations: list, str.  Activation functions for each hidden layer.
-        act_params : list, floats. Parameters for the activation functions.
-        nodes      : list, ints. For the layers with nodes, 
+        nodes      : list, ints. For the layers with nodes,
                                  number of nodes per layer.
+        kernel_regularizer: func.  Specifies the kernel regularizer to use for each layer.
+                                   Use None for no regularization.
+        lossfunc   : function.  Loss function to use.  If None, uses a mean-squared-error loss.
         lengthscale: float. Minimum learning rate.
         max_lr     : float. Maximum learning rate.
         clr_mode   : string. Cyclical learning rate function.
         clr_steps  : int. Number of steps per cycle of learning rate.
         weight_file: string. Path/to/file to save the NN weights.
-        stop_file  : string. Path/to/file to check for manual stopping of 
+        stop_file  : string. Path/to/file to check for manual stopping of
                              training.
         train_flag : bool.   Determines whether to train a model or not.
         epsilon    : float. Added to log() arguments to prevent log(0)
@@ -127,24 +637,28 @@ class NNModel:
             K.set_session(sess)
 
         # Load data
-        self.X,    self.Y    = U.load_TFdataset(ftrain_TFR, ncores, batch_size, 
-                                                buffer_size, xlen, ylen, 
+        #self.X,    self.Y    
+        self.train_dataset   = U.load_TFdataset(ftrain_TFR, ncores, batch_size,
+                                                buffer_size, ishape, oshape,
                                                 x_mean, x_std, y_mean, y_std,
-                                                x_min,  x_max, y_min,  y_max, 
+                                                x_min,  x_max, y_min,  y_max,
                                                 scalelims, shuffle)
-        self.Xval, self.Yval = U.load_TFdataset(fvalid_TFR, ncores, batch_size, 
-                                                buffer_size, xlen, ylen, 
+        #self.Xval, self.Yval 
+        self.valid_dataset   = U.load_TFdataset(fvalid_TFR, ncores, batch_size,
+                                                buffer_size, ishape, oshape,
                                                 x_mean, x_std, y_mean, y_std,
-                                                x_min,  x_max, y_min,  y_max, 
+                                                x_min,  x_max, y_min,  y_max,
                                                 scalelims, shuffle)
-        self.Xte,  self.Yte  = U.load_TFdataset(ftest_TFR,  ncores, batch_size, 
-                                                buffer_size, xlen, ylen, 
+        #self.Xte,  self.Yte  
+        self.test_dataset    = U.load_TFdataset(ftest_TFR,  ncores, batch_size,
+                                                buffer_size, ishape, oshape,
                                                 x_mean, x_std, y_mean, y_std,
-                                                x_min,  x_max, y_min,  y_max, 
+                                                x_min,  x_max, y_min,  y_max,
                                                 scalelims, shuffle)
         # Other variables
-        self.inD  = xlen
-        self.outD = ylen
+        self.ishape = ishape
+        self.oshape = oshape
+        self.D      = np.product(oshape)
         self.olog = olog
 
         self.y_mean = y_mean
@@ -161,100 +675,191 @@ class NNModel:
         self.weight_file = weight_file
         self.stop_file   = stop_file
 
+        if lossfunc is None:
+            self.lossfunc = keras.losses.MeanSquaredError
+            self.lossfunc.__name__ = 'mse'
+        else:
+            self.lossfunc = lossfunc
         self.lengthscale = lengthscale
         self.max_lr      = max_lr
         self.clr_mode    = clr_mode
         self.clr_steps   = clr_steps
-
+        
+        # only used for ConcreteDropout / SpatialConcreteDropout
+        Ntrain = self.train_batches * self.batch_size
+        wd = self.lengthscale**2. / Ntrain
+        dd = 2. / Ntrain
+        
         self.epsilon    = epsilon # To ensure log(0) never happens
 
         self.train_flag = train_flag
         self.resume     = resume
         self.shuffle    = shuffle
-        
+
         ### Build model
         # Input layer
-        if shuffle:
-            inp = Input(shape=(xlen,), tensor=self.X)
-        else:
-            inp = Input(shape=(xlen,))
+        #if shuffle:
+        #    inp = Input(shape=ishape, tensor=self.X)
+        #else:
+        #    inp = Input(shape=ishape)
+        inp = Input(shape=ishape)
         x = inp
         # Hidden layers
         n = 0 # Counter for layers with nodes
+        losses = []
         for i in range(len(layers)):
-            if layers[i] == 'conv1d':
+            if layers[i] in ['conv1d', 'conv2d', 'conv3d', 
+                             'conv2dtranspose', 'conv3dtranspose']:
                 tshape = tuple(val for val in K.int_shape(x) if val is not None)
-                if i == 0 or (i > 0 and layers[i-1] != 'conv1d'):
-                    # Add channel for convolution
+                if layers[i] == 'conv1d':
+                    Conv = Convolution1D
+                    dval = 1
+                elif 'conv2d' in layers[i]:
+                    if 'transpose' in layers[i]:
+                        Conv = Convolution2DTranspose
+                    else:
+                        Conv = Convolution2D
+                    dval = 2
+                elif 'conv3d' in layers[i]:
+                    if 'transpose' in layers[i]:
+                        Conv = Convolution3DTranspose
+                    else:
+                        Conv = Convolution3D
+                    dval = 3
+                # Check if a channel must be added for conv features
+                if len(tshape) == dval:
                     x = Reshape(tshape + (1,))(x)
                 if type(activations[n]) == str:
                     # Simple activation: pass as layer parameter
-                    x = Convolution1D(nb_filter=nodes[n], 
-                                      kernel_size=lay_params[i], 
-                                      activation=activations[n], 
-                                      padding='same')(x)
+                    x = Conv(filters=nodes[n],
+                             kernel_size=lay_params[i],
+                             activation=activations[n],
+                             kernel_regularizer=kernel_regularizer,
+                             padding='same')(x)
                 else:
                     # Advanced activation: use as its own layer
-                    x = Convolution1D(nb_filter=nodes[n], 
-                                      kernel_size=lay_params[i], 
-                                      padding='same')(x)
+                    x = Conv(filters=nodes[n],
+                             kernel_size=lay_params[i],
+                             kernel_regularizer=kernel_regularizer,
+                             padding='same')(x)
                     x = activations[n](x)
                 n += 1
-            elif layers[i] == 'dense':
+            elif layers[i] in ['dense', 'concretedropout']:
                 if i > 0:
-                    if layers[i-1] == 'conv1d':
-                        print('WARNING: Dense layer follows Conv1d layer. ' \
-                              + 'Flattening.')
+                    if layers[i-1] in ['conv1d', 'conv2d', 'conv3d',
+                                       'maxpool1d', 'maxpool2d', 'maxpool3d',
+                                       'avgpool1d', 'avgpool2d', 'avgpool3d']:
+                        print('Dense layer follows a not-Dense layer. Flattening.')
                         x = Flatten()(x)
-                if type(activations[n]) == str:
-                    x = Dense(nodes[n], activation=activations[n])(x)
-                else:
-                    x = Dense(nodes[n])(x)
-                    x = activations[n] (x)
+                elif i==0 and len(ishape) > 1:
+                    print("Dense layer follows >1D input layer. Flattening.")
+                    x = Flatten()(x)
+                if layers[i] == 'dense':
+                    if type(activations[n]) == str:
+                        x = Dense(nodes[n], activation=activations[n],
+                                  kernel_regularizer=kernel_regularizer)(x)
+                    else:
+                        x = Dense(nodes[n], kernel_regularizer=kernel_regularizer)(x)
+                        x = activations[n] (x)
+                elif layers[i] == 'concretedropout':
+                    #if type(activations[n]) == str:
+                        #x, loss = ConcreteDropout(Dense(nodes[n], activation=activations[n]), 
+                        #                    weight_regularizer=wd, 
+                        #                    dropout_regularizer=dd)(x)
+                    print("********DEBUG Calling ConcreteDropout", flush=True)
+                    x, loss = ConcreteDropout(nodes[n], activation=activations[n], 
+                                              weight_regularizer=wd, 
+                                              dropout_regularizer=dd,
+                                              kernel_regularizer=kernel_regularizer)(x)
+                    #else:
+                        #x, loss = ConcreteDropout(Dense(nodes[n]), 
+                        #                    weight_regularizer=wd, 
+                        #                    dropout_regularizer=dd)(x)
+                    #    x, loss = ConcreteDropout(nodes[n], 
+                    #                        weight_regularizer=wd, 
+                    #                        dropout_regularizer=dd)(x)
+                    #    x = activations[n](x)
+                    losses.append(loss)
                 n += 1
-            elif layers[i] == 'maxpool1d':
+            elif layers[i] in ['maxpool1d', 'maxpool2d', 'maxpool3d']:
                 if layers[i-1] == 'dense' or layers[i-1] == 'flatten':
-                    raise Exception('MaxPool layers must follow Conv1d or ' \
-                                    + 'Pool layer.')
-                x = MaxPooling1D(pool_size=lay_params[i])(x)
-            elif layers[i] == 'avgpool1d':
+                    raise ValueError('MaxPool layers must follow Conv1d or ' \
+                                   + 'Pool layer.')
+                if layers[i] == 'maxpool1d':
+                    x = MaxPooling1D(pool_size=lay_params[i])(x)
+                elif layers[i] == 'maxpool2d':
+                    x = MaxPooling2D(pool_size=lay_params[i])(x)
+                elif layers[i] == 'maxpool3d':
+                    x = MaxPooling3D(pool_size=lay_params[i])(x)
+            elif layers[i] in ['avgpool1d', 'avgpool2d', 'avgpool3d']:
                 if layers[i-1] == 'dense' or layers[i-1] == 'flatten':
-                    raise Exception('AvgPool layers must follow Conv1d or ' \
-                                    + 'Pool layer.')
-                x = AveragePooling1D(pool_size=lay_params[i])(x)
+                    raise ValueError('AvgPool layers must follow Conv1d or ' \
+                                   + 'Pool layer.')
+                if layers[i] == 'avgpool1d':
+                    x = AveragePooling1D(pool_size=lay_params[i])(x)
+                elif layers[i] == 'avgpool2d':
+                    x = AveragePooling2D(pool_size=lay_params[i])(x)
+                elif layers[i] == 'avgpool3d':
+                    x = AveragePooling3D(pool_size=lay_params[i])(x)
             elif layers[i] == 'dropout':
                 if self.train_flag:
                     x = Dropout(lay_params[i])(x)
             elif layers[i] == 'flatten':
                 x = Flatten()(x)
-        # Output layer
-        out = Dense(ylen)(x)
+            else:
+                raise ValueError("Unknown layer type: " + layers[i])
+        # Output layer(s)
+        if 'heteroscedastic' in self.lossfunc.__name__:
+            #mean, loss = ConcreteDropout(Dense(self.D), 
+            #                          weight_regularizer=wd, 
+            #                          dropout_regularizer=dd)(x)
+            mean, loss = ConcreteDropout(self.D, 
+                                      weight_regularizer=wd, 
+                                      dropout_regularizer=dd,
+                                      kernel_regularizer=kernel_regularizer)(x)
+            losses.append(loss)
+            #log_var, loss = ConcreteDropout(Dense(int(self.D * (self.D+1)/2)), 
+            #                          weight_regularizer=wd, 
+            #                          dropout_regularizer=dd)(x)
+            log_var, loss = ConcreteDropout(int(self.D * (self.D+1)/2), 
+                                      weight_regularizer=wd, 
+                                      dropout_regularizer=dd,
+                                      kernel_regularizer=kernel_regularizer)(x)
+            losses.append(loss)
+            out = concatenate([mean, log_var])
+        else:
+            x = Dense(np.prod(oshape), kernel_regularizer=kernel_regularizer)(x)
+            out = Reshape(oshape)(x)
 
         self.model = Model(inp, out)
-            
+        for loss in losses:
+            self.model.add_loss(loss)
+
         # Compile model
-        if shuffle:
-            self.model.compile(optimizer=adam(lr=self.lengthscale, amsgrad=True), 
-                               loss=keras.losses.mean_squared_error, 
-                               target_tensors=[self.Y])
-        else:
-            self.model.compile(optimizer=adam(lr=self.lengthscale, amsgrad=True), 
-                               loss=keras.losses.mean_squared_error)
+        #if shuffle:
+        #    self.model.compile(optimizer=Adam(lr=self.lengthscale, amsgrad=True),
+        #                       loss=self.lossfunc,
+        #                       target_tensors=[self.Y])
+        #else:
+        #    self.model.compile(optimizer=Adam(lr=self.lengthscale, amsgrad=True),
+        #                       loss=self.lossfunc)
+        self.model.compile(optimizer=Adam(learning_rate=self.lengthscale, amsgrad=True),
+                           loss=self.lossfunc())
         print(self.model.summary())
 
-    
-    def train(self, train_steps, valid_steps, 
-              epochs=100, patience=50):
+
+    def train(self, epochs=100, patience=50, save=True, parallel=False):
         """
         Trains model.
 
         Inputs
         ------
-        train_steps: Number of steps before the dataset repeats.
-        valid_steps: '   '   '   '   '   '   '   '   '   '   '
-        epochs     : Maximum number of iterations through the dataset to train.
-        patience   : If no model improvement after `patience` epochs, 
-                     ends training.
+        epochs     : int. Maximum number of iterations through the dataset to train.
+        patience   : int. If no model improvement after `patience` epochs,
+                          ends training.
+        save       : bool. Determines whether to save the model.
+        parallel   : bool. If True, Ctrl+C does not terminate model training (models are training in parallel, and Ctrl+C is not communicated to those processes).
+                           If False, Ctrl+C will terminate model training at the end of the next epoch.
         """
         # Directory containing the save files
         savedir = os.sep.join(self.weight_file.split(os.sep)[:-1]) + os.sep
@@ -264,15 +869,15 @@ class NNModel:
         if self.resume:
             if self.weight_file[-5:] == '.onnx':
                 #onnx_model = onnx.load(self.weight_file)
-                #self.model = onnx_to_keras(onnx_model, ['input_1'], 
+                #self.model = onnx_to_keras(onnx_model, ['input_1'],
                 #                           name_policy='short')
-                #self.model.compile(optimizer=adam(lr=self.lengthscale, 
-                #                                  amsgrad=True), 
-                #                   loss=keras.losses.mean_squared_error, 
+                #self.model.compile(optimizer=adam(lr=self.lengthscale,
+                #                                  amsgrad=True),
+                #                   loss=keras.losses.mean_squared_error,
                 #                   target_tensors=[self.Y])
                 #self.weight_file = self.weight_file.replace('.onnx', '.h5')
-                raise Exception('Resuming training for .onnx models is not '  \
-                                + 'yet available. Please specify a\n.h5 file.')
+                raise Exception('Resuming training for .onnx models is not ' + \
+                                'yet available. Please specify a .h5 file.')
             else:
                 self.model.load_weights(self.weight_file)
             try:
@@ -287,24 +892,32 @@ class NNModel:
 
         ### Callbacks
         # Save the model weights
-        model_checkpoint = keras.callbacks.ModelCheckpoint(self.weight_file,
-                                        monitor='val_loss',
-                                        save_best_only=True,
-                                        save_weights_only=False,
-                                        mode='auto',
-                                        verbose=1)
+        callbacks = []
+        if save:
+            model_checkpoint = keras.callbacks.ModelCheckpoint(self.weight_file,
+                                            monitor='val_loss',
+                                            save_best_only=True,
+                                            save_weights_only=False,
+                                            mode='auto',
+                                            verbose=1)
+            callbacks.append(model_checkpoint)
         # Handle Ctrl+C or STOP file to halt training
-        sig        = C.SignalStopping(stop_file=self.stop_file)
+        if not parallel:
+            sig = C.SignalStopping(stop_file=self.stop_file)
+            callbacks.append(sig)
         # Cyclical learning rate
-        clr        = C.CyclicLR(base_lr=self.lengthscale, max_lr=self.max_lr,
-                                step_size=self.clr_steps, mode=self.clr_mode)
+        clr = C.CyclicLR(base_lr=self.lengthscale, max_lr=self.max_lr,
+                         step_size=self.clr_steps, mode=self.clr_mode)
+        callbacks.append(clr)
         # Early stopping criteria
-        Early_Stop = keras.callbacks.EarlyStopping(monitor='val_loss', 
-                                                   min_delta=0, 
-                                                   patience=patience, 
+        Early_Stop = keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                   min_delta=0,
+                                                   patience=patience,
                                                    verbose=1, mode='auto')
+        callbacks.append(Early_Stop)
         # Stop if NaN loss occurs
         Nan_Stop = keras.callbacks.TerminateOnNaN()
+        callbacks.append(Nan_Stop)
 
         ### Train the model
         if self.train_flag:
@@ -318,48 +931,48 @@ class NNModel:
                 self.historyNN.history = np.load(fhistory)
                 self.historyCLR = None
                 return
-            # Batch size is commented out because that is handled by TFRecords
-            self.historyNN = self.model.fit(initial_epoch=init_epoch, 
-                                             epochs=epochs, 
-                                             steps_per_epoch=train_steps, 
-                                             #batch_size=self.batch_size, 
-                                             verbose=2, 
-                                             validation_data=(self.Xval, 
-                                                              self.Yval), 
-                                             validation_steps=valid_steps, 
-                                             callbacks=[clr, sig, Early_Stop, 
-                                                        Nan_Stop, 
-                                                        model_checkpoint])
+            # Run the training
+            self.historyNN = self.model.fit(self.train_dataset, 
+                                             initial_epoch=init_epoch,
+                                             epochs=epochs,
+                                             steps_per_epoch=self.train_batches,
+                                             verbose=2,
+                                             validation_data=self.valid_dataset,#(self.Xval, self.Yval),
+                                             validation_steps=self.valid_batches,
+                                             validation_freq=1,
+                                             callbacks=callbacks)
             # Save out the history
             self.historyCLR = clr.history
-            if not os.path.exists(fhistory) or not self.resume:
-                np.savez(fhistory, loss=self.historyNN.history['loss'], 
-                               val_loss=self.historyNN.history['val_loss'],
-                                     lr=self.historyCLR['lr'], 
-                               clr_loss=self.historyCLR['loss'])
-            else:
-                history  = np.load(fhistory)
-                loss     = np.concatenate((history['loss'], 
-                            self.historyNN.history['loss']))
-                val_loss = np.concatenate((history['val_loss'], 
-                            self.historyNN.history['val_loss']))
-                np.savez(fhistory, loss=loss, val_loss=val_loss)
-                self.historyNN.history['loss'] = loss
-                self.historyNN.history['val_loss'] = val_loss
+            if save:
+                if not self.resume:
+                    np.savez(fhistory, loss=self.historyNN.history['loss'],
+                                   val_loss=self.historyNN.history['val_loss'],
+                                         lr=self.historyCLR['lr'],
+                                   clr_loss=self.historyCLR['loss'])
+                else:
+                    history  = np.load(fhistory)
+                    loss     = np.concatenate((history['loss'],
+                                self.historyNN.history['loss']))
+                    val_loss = np.concatenate((history['val_loss'],
+                                self.historyNN.history['val_loss']))
+                    np.savez(fhistory, loss=loss, val_loss=val_loss)
+                    self.historyNN.history['loss'] = loss
+                    self.historyNN.history['val_loss'] = val_loss
 
         # Load best set of weights
-        self.model.load_weights(self.weight_file)
+        if save:
+            self.model.load_weights(self.weight_file)
 
     def Yeval(self, mode, dataset, preddir, denorm=False):
         """
-        Saves out .NPY files of the true or predicted Y values for a 
+        Saves out .NPY files of the true or predicted Y values for a
         specified data set.
 
         Inputs
         ------
-        mode   : string. 'pred' or 'true'. Specifies whether to save the true 
+        mode   : string. 'pred' or 'true'. Specifies whether to save the true
                          or predicted Y values of  `dataset`.
-        dataset: string. 'train', 'valid', or 'test'. Specifies the data set to 
+        dataset: string. 'train', 'valid', or 'test'. Specifies the data set to
                          make predictions on.
         preddir: string. Path/to/directory where predictions will be saved.
         denorm : bool.   Determines whether to denormalize the predicted values.
@@ -369,16 +982,19 @@ class NNModel:
                         "new NNModel object with shuffle=False and try again.")
 
         if dataset == 'train':
-            X = self.X
-            Y = self.Y
+            #X = self.X
+            #Y = self.Y
+            TFRdataset = self.train_dataset.as_numpy_iterator()
             num_batches = self.train_batches
         elif dataset == 'valid':
-            X = self.Xval
-            Y = self.Yval
+            #X = self.Xval
+            #Y = self.Yval
+            TFRdataset = self.valid_dataset.as_numpy_iterator()
             num_batches = self.valid_batches
         elif dataset == 'test':
-            X = self.Xte
-            Y = self.Yte
+            #X = self.Xte
+            #Y = self.Yte
+            TFRdataset = self.test_dataset.as_numpy_iterator()
             num_batches = self.test_batches
         else:
             raise ValueError("Invalid specification for `dataset` parameter " +\
@@ -401,17 +1017,18 @@ class NNModel:
         U.make_dir(preddir+dataset) # Ensure the directory exists
 
         # Save out the Y values
-        y_batch = np.zeros((self.batch_size, self.outD))
+        y_batch = np.zeros((self.batch_size, *self.oshape))
         for i in range(num_batches):
             foo = ''.join([fname, str(i).zfill(len(str(num_batches))), '.npy'])
+            batch = TFRdataset.next() # Get next batch
             if mode == 'pred': # Predicted Y values
-                x_batch = K.eval(X)
+                x_batch = batch[0] # X values - inputs
                 y_batch = self.model.predict(x_batch)
             else:  # True Y values
-                y_batch = K.eval(Y)
+                y_batch = batch[1] # Y values - outputs
             if denorm:
-                y_batch = U.denormalize(U.descale(y_batch, 
-                                                  self.y_min, self.y_max, 
+                y_batch = U.denormalize(U.descale(y_batch,
+                                                  self.y_min, self.y_max,
                                                   self.scalelims),
                                         self.y_mean, self.y_std)
                 if self.olog:
@@ -423,21 +1040,101 @@ class NNModel:
         return fname
 
 
+def objective(trial, ftrain_TFR, fvalid_TFR, ftest_TFR,
+              weight_file, ishape, oshape, olog,
+              x_mean, x_std, y_mean, y_std,
+              x_min,  x_max, y_min,  y_max, scalelims,
+              ncores, buffer_size, batch_size,
+              nbatches, lossfunc, lengthscale, max_lr,
+              clr_mode, clr_steps,
+              optnlays, optlayer, optnnode, optconvnode, optactiv, optactrng,
+              optminlr, optmaxlr, 
+              nodes, layers, kernel_regularizer, 
+              epochs, patience,
+              igpu):
+    """
+    Objective function to minimize during hyperparameter optimization.
+    functools.partial() should be used to freeze the non-varying parameters.
+    """
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    tf.config.experimental.set_visible_devices(gpus[igpu], 'GPU')
+    if optnlays is not None:
+        nlayers = trial.suggest_int("layers", optnlays[0], optnlays[1])
+    else:
+        nlayers = len(layers)
+    n = 0
+    nnodes = []
+    activs = []
+    actval = []
+    activations = []
+    selected_layers = []
+    for i in range(nlayers):
+        #if i==0 and optlayer is not None:
+        #    layers.append(trial.suggest_categorical("layer_"+str(i+1), optlayer))
+        #else:
+        #    layers.append('dense')
+        if optlayer is None:
+            selected_layers.append(layers[i])
+        else:
+            selected_layers.append(optlayer[i])
+        if optnnode is None:
+            if selected_layers[i] not in ['flatten']:
+                nnodes.append(nodes[n])
+                n += 1
+        else:
+            if selected_layers[-1] in ['conv1d', 'conv2d', 'conv3d'] and optconvnode is not None:
+                nnodes.append(trial.suggest_categorical("nodes_"+str(i+1), optconvnode))
+            else:
+                nnodes.append(trial.suggest_categorical("nodes_"+str(i+1), optnnode))
+        if selected_layers[-1] not in ['flatten']:
+            activs.append(trial.suggest_categorical("activation_"+str(i+1), optactiv))
+            if activs[-1] in ['leakyrelu', 'elu'] and optactrng is not None:
+                actval.append(trial.suggest_float("act_val_"+str(i+1), optactrng[0], optactrng[1]))
+            else:
+                actval.append(None)
+        #else:
+        #    activs.append('linear')
+        #    actval.append(None)
+        activations.append(L.load_activation(activs[-1], actval[-1]))
+    if None not in [optminlr, optmaxlr]:
+        lengthscale = trial.suggest_float("min_lr", optminlr, optmaxlr)
+        max_lr = trial.suggest_float("max_lr", lengthscale, optmaxlr)
+    lay_params, _ = U.prepare_layers(selected_layers, [None]*nlayers, nnodes)
+    try:
+        model = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
+                        ishape, oshape, olog,
+                        x_mean, x_std, y_mean, y_std,
+                        x_min,  x_max, y_min,  y_max, scalelims,
+                        ncores, buffer_size, batch_size, nbatches,
+                        selected_layers, lay_params, activations, nnodes,
+                        kernel_regularizer, 
+                        lossfunc=lossfunc, lengthscale=lengthscale, max_lr=max_lr,
+                        clr_mode=clr_mode, clr_steps=clr_steps,
+                        weight_file=weight_file, train_flag=True,
+                        epsilon=1e-6, shuffle=True)
+        model.train(epochs, patience, save=False, parallel=True)
+        return np.amin(model.historyNN.history['val_loss'])
+    except Exception as e:
+        print(e)
+        return 1e100
 
-def driver(inputdir, outputdir, datadir, plotdir, preddir, 
-           trainflag, validflag, testflag, 
-           normalize, fmean, fstdev, 
-           scale, fmin, fmax, scalelims, 
-           fsize, rmse_file, r2_file, 
-           inD, outD, ilog, olog, 
-           TFRfile, batch_size, ncores, buffer_size, 
-           gridsearch, architectures, 
-           layers, lay_params, activations, act_params, nodes, 
-           lengthscale, max_lr, clr_mode, clr_steps, 
-           epochs, patience, 
-           weight_file, resume, 
-           plot_cases, fxvals, xlabel, ylabel, 
-           filters=None, filtconv=1.):
+def driver(inputdir, outputdir, datadir, plotdir, preddir,
+           trainflag, validflag, testflag,
+           normalize, fxmean, fxstd, fymean, fystd,
+           scale, fxmin, fxmax, fymin, fymax, scalelims,
+           fsize, rmse_file, r2_file, statsaxes,
+           ishape, oshape, ilog, olog,
+           TFRfile, batch_size, ncores, buffer_size,
+           optimize, optfunc, optngpus, opttime, optnlays, optlayer, optnnode,
+           optactiv, optactrng, optminlr, optmaxlr, optmaxconvnode,
+           gridsearch, architectures,
+           layers, lay_params, activations, nodes, kernel_regularizer, 
+           lossfunc, lengthscale, max_lr, clr_mode, clr_steps,
+           model_predict, model_evaluate, 
+           epochs, patience,
+           weight_file, resume,
+           plot_cases, fxvals, xlabel, ylabel, smoothing,
+           filters=None, filtconv=1., verb=1):
     """
     Driver function to handle model training and evaluation.
 
@@ -452,74 +1149,99 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     validflag  : bool.   Determines whether to validate the NN model.
     testflag   : bool.   Determines whether to test     the NN model.
     normalize  : bool.   Determines whether to normalize the data.
-    fmean      : string. Path/to/file of mean  of training data.
-    fstdev     : string. Path/to/file of stdev of training data.
+    fxmean     : string. Path/to/file of mean  of training data inputs.
+    fymean     : string. Path/to/file of mean  of training data outputs.
+    fxstd      : string. Path/to/file of standard deviation of training data inputs.
+    fystd      : string. Path/to/file of standard deviation of training data outputs.
     scale      : bool.   Determines whether to scale the data.
-    fmin       : string. Path/to/file of minima of training data.
-    fmax       : string. Path/to/file of maxima of training data.
+    fxmin      : string. Path/to/file of minima of training data inputs.
+    fxmax      : string. Path/to/file of maxima of training data inputs.
+    fymin      : string. Path/to/file of minima of training data outputs.
+    fymax      : string. Path/to/file of maxima of training data outputs.
     scalelims  : list, floats. [min, max] of range of scaled data.
     rmse_file  : string. Prefix for savefiles for RMSE calculations.
     r2_file    : string. Prefix for savefiles for R2 calculations.
-    inD        : int.    Dimensionality of the input  data.
-    outD       : int.    Dimensionality of the output data.
+    statsaxes  : string. Determines which axes to compute stats over.
+                         Options: all - all axes except last axis
+                                batch - only 0th axis
+    ishape     : tuple, ints. Dimensionality of the input  data.
+    oshape     : tuple, ints. Dimensionality of the output data.
     ilog       : bool.   Determines whether to take the log10 of intput  data.
     olog       : bool.   Determines whether to take the log10 of output data.
     TFRfile    : string. Prefix for TFRecords files.
     batch_size : int.    Size of batches for training/validating/testing.
     ncores     : int.    Number of cores to use to load data cases.
     buffer_size: int.    Number of data cases to pre-load in memory.
-    gridsearch : bool.   Determines whether to perform a grid search over 
+    optimize   : int.    Determines whether to use hyperparameter optimization.
+                         If >0, determines number of trials to use when optimizing.
+    optfunc    : function. Function to use while optimizing with Optuna.
+                           If None, defaults to `objective` in this module.
+    optngpus   : int.    Number of GPUs to use while optimizing hyperparameters.
+    opttime    : int.    Sets the timeout limit for optimization.
+                         If None, runs until `optimize` trials have been completed.
+    optnlays   : list, ints. Determines the number of hidden layers to optimize over.
+    optlayer   : list, strs. Determines which types of hidden layers to optimize over.  Only affects the first layer.
+    optnnode   : list, ints. Determines the number of nodes per hidden layer to optimize over.
+    optactiv   : list, strs. Determines the activation functions to optimize over.
+    optactrng  : list, floats. Determines the range to explore for advanced activation functions to optimize over.
+    optminlr   : float.  Minimum learning rate when optimizing.
+    optmaxlr   : float.  Maximum learning rate when optimizing.
+    optmaxconvnode: int. Maximum number of features allowed for convolutional layers.
+    gridsearch : bool.   Determines whether to perform a grid search over
                          `architectures`.
     architectures: list. Model architectures to consider.
     layers     : list, str.  Types of hidden layers.
-    lay_params : list, ints. Parameters for the layer type 
+    lay_params : list, ints. Parameters for the layer type
                              E.g., kernel size
     activations: list, str.  Activation functions for each hidden layer.
-    act_params : list, floats. Parameters for the activation functions.
     nodes      : list, ints. For layers with nodes, number of nodes per layer.
+    kernel_regularizer: func.  Specifies the kernel regularizer to use for each layer.
+                               Use None for no regularization.
+    lossfunc   : function.  Function to use for the loss function.  If None, uses a mean-squared-error loss
     lengthscale: float.  Minimum learning rat.e
     max_lr     : float.  Maximum learning rate.
     clr_mode   : string. Sets the cyclical learning rate function.
     clr_steps  : int.    Number of steps per cycle of the learning rate.
+    model_predict : func. Function to override Keras Model.predict  API.  Use None for default API.
+    model_evaluate: func. Function to override Keras Model.evaluate API.  Use None for default API.
     epochs     : int.    Max number of iterations through dataset for training.
-    patience   : int.    If no model improvement after `patience` epochs, 
+    patience   : int.    If no model improvement after `patience` epochs,
                          halts training.
     weight_file: string. Path/to/file where NN weights are saved.
     resume     : bool.   Determines whether to resume training.
     plot_cases : list, ints. Cases from test set to plot.
-    fxvals     : string. Path/to/file of X-axis values to correspond to 
+    fxvals     : string. Path/to/file of X-axis values to correspond to
                          predicted Y values.
     xlabel     : string. X-axis label for plotting.
     ylabel     : string. Y-axis label for plotting.
+    smoothing  : int.    Sets the window size for a Savitsky-Golay filter to plot the smoothed results.
+                         If 0 or False, does not apply smoothing during plotting.
     filters    : list, strings.  Paths/to/filter files.  Default: None
-                         If specified, will compute RMSE/R2 stats over the 
+                         If specified, will compute RMSE/R2 stats over the
                          integrated filter bandpasses.
-    filtconv   : float.  Conversion factor for filter file x-axis values to 
+    filtconv   : float.  Conversion factor for filter file x-axis values to
                          desired unit.  Default: 1.0
+    verb       : int.    Controls how much output is printed to terminal.
     """
     # Get file names, calculate number of cases per file
-    print('Loading files & calculating total number of batches...')
+    print('Loading files & calculating total number of batches...', flush=True)
 
     try:
-        datsize   = np.load(inputdir + fsize)
+        datsize   = np.load(fsize)
         num_train = datsize[0]
         num_valid = datsize[1]
         num_test  = datsize[2]
     except:
-        ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
-        fvalid = glob.glob(datadir + 'valid' + os.sep + '*.npy')
-        ftest  = glob.glob(datadir + 'test'  + os.sep + '*.npy')
-        num_train = U.data_set_size(ftrain, ncores)
-        num_valid = U.data_set_size(fvalid, ncores)
-        num_test  = U.data_set_size(ftest,  ncores)
-        np.save(inputdir + fsize, np.array([num_train, num_valid, num_test], dtype=int))
-        del ftrain, fvalid, ftest
+        num_train = U.data_set_size(glob.glob(datadir + 'train' + os.sep + '*.npz'), ishape, oshape, ncores)
+        num_valid = U.data_set_size(glob.glob(datadir + 'valid' + os.sep + '*.npz'), ishape, oshape, ncores)
+        num_test  = U.data_set_size(glob.glob(datadir + 'test'  + os.sep + '*.npz'), ishape, oshape, ncores)
+        np.save(fsize, np.array([num_train, num_valid, num_test], dtype=int))
 
     print("Data set sizes")
     print("Training   data:", num_train)
     print("Validation data:", num_valid)
     print("Testing    data:", num_test)
-    print("Total      data:", num_train + num_valid + num_test)
+    print("Total          :", num_train + num_valid + num_test)
 
     train_batches = num_train // batch_size
     valid_batches = num_valid // batch_size
@@ -535,28 +1257,24 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
 
     # Get mean/stdev for normalizing
     if normalize:
-        print('\nNormalizing the data...')
+        print('\nNormalizing the data...', flush=True)
         try:
-            mean   = np.load(inputdir + fmean)
-            stdev  = np.load(inputdir + fstdev)
+            x_mean = np.load(fxmean)
+            x_std  = np.load(fxstd)
+            y_mean = np.load(fymean)
+            y_std  = np.load(fystd)
         except:
             print("Calculating the mean and standard deviation of the data " +\
-                  "using Welford's method.")
+                  "using Welford's method.", flush=True)
             # Compute stats
-            ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
-            mean, stdev, datmin, datmax = S.mean_stdev(ftrain, inD, ilog, olog)
-            np.save(inputdir + fmean,  mean)
-            np.save(inputdir + fstdev, stdev)
-            np.save(inputdir + fmin,   datmin)
-            np.save(inputdir + fmax,   datmax)
-            del datmin, datmax, ftrain
-        print("mean :", mean)
-        print("stdev:", stdev)
-        # Slice desired indices
-        x_mean, y_mean = mean [:inD], mean [inD:]
-        x_std,  y_std  = stdev[:inD], stdev[inD:]
-        # Memory cleanup -- no longer need full mean/stdev arrays
-        del mean, stdev
+            x_mean, x_std, x_min, x_max, \
+            y_mean, y_std, y_min, y_max  = S.save_stats_files(glob.glob(datadir + 'train' + os.sep + '*.npz'),
+                                                              ilog, olog, ishape, oshape,
+                                                              fxmean, fxstd, fxmin,  fxmax,
+                                                              fymean, fystd, fymin,  fymax, statsaxes)
+        if verb:
+            print("mean :", x_mean, y_mean)
+            print("stdev:", x_std,  y_std)
     else:
         x_mean = 0.
         x_std  = 1.
@@ -564,40 +1282,33 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         y_std  = 1.
 
     if olog:
-        # To properly calculate RMSE & R2 for log-scaled output
+        # To later properly calculate RMSE & R2 for log-scaled output
         try:
-            y_mean_delog = np.load(inputdir + 
-                                   fmean.replace(".npy", "_delog.npy"))
+            y_mean_delog = np.load(fymean.replace(".npy", "_delog.npy"))
         except:
-            ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
-            mean_delog = S.mean_stdev(ftrain, inD, ilog, False)[0]
-            del ftrain
-            y_mean_delog = mean_delog[inD:]
-            np.save(inputdir + fmean.replace(".npy", "_delog.npy"), y_mean_delog)
+            y_mean_delog = S.get_stats(glob.glob(datadir + 'train' + os.sep + '*.npz'),
+                                       ilog, False, ishape, oshape, statsaxes)[4]
+            np.save(fymean.replace(".npy", "_delog.npy"), y_mean_delog)
     else:
         y_mean_delog = y_mean
 
     # Get min/max values for scaling
     if scale:
-        print('\nScaling the data...')
+        print('\nScaling the data...', flush=True)
         try:
-            datmin = np.load(inputdir + fmin)
-            datmax = np.load(inputdir + fmax)
+            x_min = np.load(fxmin)
+            x_max = np.load(fxmax)
+            y_min = np.load(fymin)
+            y_max = np.load(fymax)
         except:
-            ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
-            mean, stdev, datmin, datmax = S.mean_stdev(ftrain, inD, ilog, olog)
-            np.save(inputdir + fmean,  mean)
-            np.save(inputdir + fstdev, stdev)
-            np.save(inputdir + fmin,   datmin)
-            np.save(inputdir + fmax,   datmax)
-            del mean, stdev, ftrain
-        print("min  :", datmin)
-        print("max  :", datmax)
-        # Slice desired indices
-        x_min, y_min = datmin[:inD], datmin[inD:]
-        x_max, y_max = datmax[:inD], datmax[inD:]
-        # Memory cleanup -- no longer need min/max arrays
-        del datmin, datmax
+            x_mean, x_std, x_min, x_max, \
+            y_mean, y_std, y_min, y_max  = S.save_stats_files(glob.glob(datadir + 'train' + os.sep + '*.npz'),
+                                                              ilog, olog, ishape, oshape,
+                                                              fxmean, fxstd, fxmin,  fxmax,
+                                                              fymean, fystd, fymin,  fymax, statsaxes)
+        if verb:
+            print("min:", x_min, y_min)
+            print("max:", x_max, y_max)
 
         # Normalize min/max values
         if normalize:
@@ -613,33 +1324,31 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         scalelims = [0., 1.]
 
     # Get TFRecord file names
-    print('\nLoading TFRecords file names...')
-    TFRpath = inputdir +'TFRecords' + os.sep + TFRfile
+    print('\nLoading TFRecords file names...', flush=True)
+    TFRpath = os.path.join(inputdir, 'TFRecords', TFRfile)
     ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
     fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
     ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
 
     if len(ftrain_TFR) == 0 or len(fvalid_TFR) == 0 or len(ftest_TFR) == 0:
         # Doesn't exist -- make them
-        print("\nSome TFRecords files do not exist yet.")
-        ftrain = glob.glob(datadir + 'train' + os.sep + '*.npy')
-        fvalid = glob.glob(datadir + 'valid' + os.sep + '*.npy')
-        ftest  = glob.glob(datadir + 'test'  + os.sep + '*.npy')
+        print("\nSome TFRecords files do not exist yet.", flush=True)
         if len(ftrain_TFR) == 0:
-            print("Making TFRecords for training data...")
-            U.make_TFRecord(inputdir+'TFRecords'+os.sep+TFRfile+'train.tfrecords', 
-                            ftrain, inD, ilog, olog, batch_size, train_batches)
+            print("Making TFRecords for training data...", flush=True)
+            U.make_TFRecord(TFRpath + 'train.tfrecords',
+                            glob.glob(datadir + 'train' + os.sep + '*.npz'),
+                            ilog, olog, batch_size, train_batches)
         if len(fvalid_TFR) == 0:
-            print("\nMaking TFRecords for validation data...")
-            U.make_TFRecord(inputdir+'TFRecords'+os.sep+TFRfile+'valid.tfrecords', 
-                            fvalid, inD, ilog, olog, batch_size, valid_batches)
+            print("\nMaking TFRecords for validation data...", flush=True)
+            U.make_TFRecord(TFRpath + 'valid.tfrecords',
+                            glob.glob(datadir + 'valid' + os.sep + '*.npz'),
+                            ilog, olog, batch_size, valid_batches)
         if len(ftest_TFR) == 0:
-            print("\nMaking TFRecords for test data...")
-            U.make_TFRecord(inputdir+'TFRecords'+os.sep+TFRfile+'test.tfrecords', 
-                            ftest,  inD, ilog, olog, batch_size, test_batches)
-        print("\nTFRecords creation complete.")
-        # Free memory
-        del ftrain, fvalid, ftest
+            print("\nMaking TFRecords for test data...", flush=True)
+            U.make_TFRecord(TFRpath + 'test.tfrecords',
+                            glob.glob(datadir + 'test'  + os.sep + '*.npz'),
+                            ilog, olog, batch_size, test_batches)
+        print("\nTFRecords creation complete.", flush=True)
         # Get TFR file names for real this time
         ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
         fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
@@ -654,7 +1363,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     # Perform grid search
     if gridsearch:
         # Train a model for each architecture, w/ unique directories
-        print("\nPerforming a grid search.\n")
+        print("\nPerforming a grid search.\n", flush=True)
         maxlen = 0
         for i, arch in enumerate(architectures):
             if len(arch) > maxlen:
@@ -663,24 +1372,25 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             wsplit  = weight_file.rsplit(os.sep, 1)[1].rsplit('.', 1)
             wfile   = ''.join([archdir, wsplit[0], '_', arch, '.', wsplit[1]])
             U.make_dir(archdir)
-            nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                         inD, outD, olog, 
-                         x_mean, x_std, y_mean, y_std, 
-                         x_min,  x_max, y_min,  y_max, scalelims, 
-                         ncores, buffer_size, batch_size, 
-                         [train_batches, valid_batches, test_batches], 
-                         layers[i], lay_params[i], 
-                         activations[i], act_params[i], nodes[i], 
-                         lengthscale, max_lr, clr_mode, clr_steps, 
-                         wfile, stop_file='./STOP', resume=resume, 
+            nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
+                         ishape, oshape, olog,
+                         x_mean, x_std, y_mean, y_std,
+                         x_min,  x_max, y_min,  y_max, scalelims,
+                         ncores, buffer_size, batch_size,
+                         [train_batches, valid_batches, test_batches],
+                         layers[i], lay_params[i],
+                         activations[i], nodes[i], kernel_regularizer, 
+                         lossfunc, lengthscale, max_lr, model_predict, model_evaluate, 
+                         clr_mode, clr_steps,
+                         wfile, stop_file='./STOP', resume=resume,
                          train_flag=True, shuffle=True)
-            nn.train(train_batches, valid_batches, epochs, patience)
+            nn.train(epochs, patience)
             P.loss(nn, archdir)
         # Print/save out the minmium validation loss for each architecture
         minvl = np.ones(len(architectures)) * np.inf
         print('Grid search summary')
         print('-------------------')
-        with open(outputdir + 'gridsearch.txt', 'w') as foo:
+        with open(os.path.join(outputdir, 'gridsearch.txt'), 'w') as foo:
             foo.write('Grid search summary\n')
             foo.write('-------------------\n')
         for i, arch in enumerate(architectures):
@@ -688,38 +1398,99 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             history  = np.load(archdir+'history.npz')
             minvl[i] = np.amin(history['val_loss'])
             print(arch.ljust(maxlen, ' ') + ': ' + str(minvl[i]))
-            with open(outputdir + 'gridsearch.txt', 'a') as foo:
+            with open(os.path.join(outputdir, 'gridsearch.txt'), 'a') as foo:
                 foo.write(arch.ljust(maxlen, ' ') + ': ' \
                           + str(minvl[i]) + '\n')
         return
 
+    # Hyperparameter optimization
+    if optimize:
+        print("\nRunning hyperparameter optimization:", flush=True)
+        print("  Number of trials per GPU:", optimize)
+        print("  Number of layers:", optnlays[0], '-', optnlays[1])
+        print("  Number of nodes per layer:", optnnode)
+        print("  Activation functions:", optactiv)
+        if optactrng is not None:
+            print("  Activation parameter range:", optactrng[0], '-', optactrng[1])
+        if None not in [optminlr, optmaxlr]:
+            print("  Minimum learning rate:", optminlr)
+            print("  Maximum learning rate:", optmaxlr)
+        if opttime is not None:
+            print("  Time limit:", opttime/60./60., "hrs")
+        with dask.distributed.Client() as client:
+            storage = optuna.integration.dask.DaskStorage()
+            sampler = optuna.samplers.TPESampler(n_startup_trials=5)
+            study = optuna.create_study(storage=storage, sampler=sampler, direction='minimize')
+            futures = []
+            if optnnode is not None and optmaxconvnode is not None:
+                optconvnode = [val for val in optnnode if val <= optmaxconvnode]
+            else:
+                optconvnode = None
+            for i in range(optngpus):
+                if optfunc is None:
+                    optfunc = objective
+                theobjective = functools.partial(optfunc,
+                            ftrain_TFR=ftrain_TFR, fvalid_TFR=fvalid_TFR, ftest_TFR=ftest_TFR,
+                            weight_file=weight_file, ishape=ishape, oshape=oshape, olog=olog,
+                            x_mean=x_mean, x_std=x_std, y_mean=y_mean, y_std=y_std,
+                            x_min=x_min,   x_max=x_max, y_min=y_min,   y_max=y_max, scalelims=scalelims,
+                            ncores=ncores, buffer_size=buffer_size, batch_size=batch_size,
+                            nbatches=[train_batches, valid_batches, test_batches],
+                            lossfunc=lossfunc, lengthscale=lengthscale, max_lr=max_lr,
+                            clr_mode=clr_mode, clr_steps=clr_steps,
+                            optnlays=optnlays, optlayer=optlayer, optnnode=optnnode, optconvnode=optconvnode,
+                            optactiv=optactiv, optactrng=optactrng,
+                            optminlr=optminlr, optmaxlr=optmaxlr,
+                            nodes=nodes, layers=layers, kernel_regularizer=kernel_regularizer, 
+                            epochs=epochs, patience=patience, igpu=i)
+                futures.append(client.submit(study.optimize, theobjective, n_trials=optimize, timeout=opttime, pure=False))
+            dask.distributed.wait(futures)
+            print("\nHyperparameter optimization complete.  Best trial:", flush=True)
+            for key, value in study.best_trial.params.items():
+                print("  {}: {}".format(key, value))
+            trials = study.get_trials()
+            with open(os.path.join(outputdir, "optuna-study.dat"), "wb") as foo:
+                pickle.dump(trials, foo)
+            if optlayer is not None:
+                U.write_ordered_optuna_summary(os.path.join(outputdir, 'optuna-ordered-summary.txt'), trials, optlayer)
+            else:
+                U.write_ordered_optuna_summary(os.path.join(outputdir, 'optuna-ordered-summary.txt'), trials, layers, nodes)
+        return
+
     # Train a model
     if trainflag:
-        print('\nBeginning model training.\n')
-        nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                     inD, outD, olog, 
-                     x_mean, x_std, y_mean, y_std, 
-                     x_min,  x_max, y_min,  y_max, scalelims, 
-                     ncores, buffer_size, batch_size, 
-                     [train_batches, valid_batches, test_batches], 
-                     layers, lay_params, activations, act_params, nodes, 
-                     lengthscale, max_lr, clr_mode, clr_steps, 
-                     weight_file, stop_file='./STOP', 
+        print('\nBeginning model training.\n', flush=True)
+        nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
+                     ishape, oshape, olog,
+                     x_mean, x_std, y_mean, y_std,
+                     x_min,  x_max, y_min,  y_max, scalelims,
+                     ncores, buffer_size, batch_size,
+                     [train_batches, valid_batches, test_batches],
+                     layers, lay_params, activations, nodes, kernel_regularizer, 
+                     lossfunc, lengthscale, max_lr, model_predict, model_evaluate, 
+                     clr_mode, clr_steps,
+                     weight_file, stop_file='./STOP',
                      train_flag=True, shuffle=True, resume=resume)
-        nn.train(train_batches, valid_batches, epochs, patience)
+        nn.train(epochs, patience)
         # Plot the loss
         P.loss(nn, plotdir)
 
     # Call new model with shuffle=False
-    nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR, 
-                 inD, outD, olog, 
-                 x_mean, x_std, y_mean, y_std, 
-                 x_min,  x_max, y_min,  y_max, scalelims, 
-                 ncores, buffer_size, batch_size, 
-                 [train_batches, valid_batches, test_batches], 
-                 layers, lay_params, activations, act_params, nodes, 
-                 lengthscale, max_lr, clr_mode, clr_steps, 
-                 weight_file, stop_file='./STOP', 
+    # lossfunc is set to None because we will not be training it, and
+    # certain loss functions would throw an error here due to undefined shapes
+    if lossfunc is not None:
+        if 'heteroscedastic' not in lossfunc.__name__:
+            lossfunc = None
+    nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
+                 ishape, oshape, olog,
+                 x_mean, x_std, y_mean, y_std,
+                 x_min,  x_max, y_min,  y_max, scalelims,
+                 ncores, buffer_size, batch_size,
+                 [train_batches, valid_batches, test_batches],
+                 layers, lay_params, activations, nodes, kernel_regularizer, 
+                 lossfunc, lengthscale, max_lr, model_predict, model_evaluate, 
+                 clr_mode, clr_steps,
+                 weight_file, stop_file='./STOP',
                  train_flag=False, shuffle=False, resume=False)
     if '.h5' in weight_file or '.hdf5' in weight_file:
         nn.model.load_weights(weight_file) # Load the model
@@ -735,28 +1506,28 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
 
     # Validate model
     if (validflag or trainflag) and not rng_test:
-        print('\nValidating the model...\n')
+        print('\nValidating the model...\n', flush=True)
         # Y values
         print('  Predicting...')
-        fvalpred = nn.Yeval('pred', 'valid', preddir, 
+        fvalpred = nn.Yeval('pred', 'valid', preddir,
                             denorm=(normalize==False and scale==False))
         fvalpred = glob.glob(fvalpred + '*')
 
         print('  Loading the true Y values...')
-        fvaltrue = nn.Yeval('true', 'valid', preddir, 
+        fvaltrue = nn.Yeval('true', 'valid', preddir,
                             denorm=(normalize==False and scale==False))
         fvaltrue = glob.glob(fvaltrue + '*')
         ### RMSE & R2
         print('\n Calculating RMSE & R2...')
         if not normalize and not scale:
-            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, 
-                                  olog=olog, y_mean_delog=y_mean_delog, 
-                                  x_vals=xvals, 
+            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean,
+                                  olog=olog, y_mean_delog=y_mean_delog,
+                                  x_vals=xvals,
                                   filters=filters, filtconv=filtconv)
         else:
-            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean, 
-                                  y_std, y_min, y_max, scalelims, 
-                                  olog, y_mean_delog, 
+            val_stats = S.rmse_r2(fvalpred, fvaltrue, y_mean,
+                                  y_std, y_min, y_max, scalelims,
+                                  olog, y_mean_delog,
                                   xvals, filters, filtconv)
         # RMSE
         if np.any(val_stats[0] != -1) and np.any(val_stats[1] != -1):
@@ -764,7 +1535,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             print('  Mean normalized RMSE  : ', np.mean(val_stats[0]))
             print('  Denormalized RMSE     : ', val_stats[1])
             print('  Mean denormalized RMSE: ', np.mean(val_stats[1]))
-            np.savez(outputdir+rmse_file+'_val_norm.npz', 
+            np.savez(outputdir+rmse_file+'_val_norm.npz',
                      rmse=val_stats[0], rmse_mean=np.mean(val_stats[0]))
             saveRMSEnorm   = True
             saveRMSEdenorm = True
@@ -783,14 +1554,20 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             saveRMSEnorm   = False
             saveRMSEdenorm = False
         if saveRMSEnorm:
-            P.plot(''.join([plotdir, rmse_file, '_val_norm.png']), 
-                   xvals, val_stats[0], xlabel, 'RMSE')
-            np.savez(outputdir+rmse_file+'_val_norm.npz', 
+            try:
+                P.plot(''.join([plotdir, rmse_file, '_val_norm.png']),
+                       xvals, val_stats[0], xlabel, 'RMSE')
+            except:
+                print("Normalized RMSE unable to be plotted.")
+            np.savez(outputdir+rmse_file+'_val_norm.npz',
                      rmse=val_stats[0], rmse_mean=np.mean(val_stats[0]))
         if saveRMSEdenorm:
-            P.plot(''.join([plotdir, rmse_file, '_val_denorm.png']), 
-                   xvals, val_stats[1], xlabel, 'RMSE')
-            np.savez(outputdir+rmse_file+'_val_denorm.npz', 
+            try:
+                P.plot(''.join([plotdir, rmse_file, '_val_denorm.png']),
+                       xvals, val_stats[1], xlabel, 'RMSE')
+            except:
+                print("Denormalized RMSE unable to be plotted.")
+            np.savez(outputdir+rmse_file+'_val_denorm.npz',
                      rmse=val_stats[1], rmse_mean=np.mean(val_stats[1]))
         # R2
         if np.any(val_stats[2] != -1) and np.any(val_stats[3] != -1):
@@ -815,40 +1592,46 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             saveR2norm   = False
             saveR2denorm = False
         if saveR2norm:
-            P.plot(''.join([plotdir, r2_file, '_val_norm.png']), 
-                   xvals, val_stats[2], xlabel, '$R^2$')
-            np.savez(outputdir+r2_file+'_val_norm.npz', 
+            try:
+                P.plot(''.join([plotdir, r2_file, '_val_norm.png']),
+                       xvals, val_stats[2], xlabel, '$R^2$')
+            except:
+                print("Normalized R2 unable to be plotted.")
+            np.savez(outputdir+r2_file+'_val_norm.npz',
                      r2=val_stats[2], r2_mean=np.mean(val_stats[2]))
         if saveR2denorm:
-            P.plot(''.join([plotdir, r2_file, '_val_denorm.png']), 
-                   xvals, val_stats[3], xlabel, '$R^2$')
-            np.savez(outputdir+r2_file+'_val_denorm.npz', 
+            try:
+                P.plot(''.join([plotdir, r2_file, '_val_denorm.png']),
+                       xvals, val_stats[3], xlabel, '$R^2$')
+            except:
+                print("Denormalized R2 unable to be plotted.")
+            np.savez(outputdir+r2_file+'_val_denorm.npz',
                      r2=val_stats[3], r2_mean=np.mean(val_stats[3]))
 
     # Evaluate model on test set
     if testflag and not rng_test:
-        print('\nTesting the model...\n')
+        print('\nTesting the model...\n', flush=True)
         # Y values
         print('  Predicting...')
-        ftestpred = nn.Yeval('pred', 'test', preddir, 
+        ftestpred = nn.Yeval('pred', 'test', preddir,
                              denorm=(normalize==False and scale==False))
         ftestpred = glob.glob(ftestpred + '*')
 
         print('  Loading the true Y values...')
-        ftesttrue = nn.Yeval('true', 'test', preddir, 
+        ftesttrue = nn.Yeval('true', 'test', preddir,
                              denorm=(normalize==False and scale==False))
         ftesttrue = glob.glob(ftesttrue + '*')
         ### RMSE & R2
         print('\n Calculating RMSE & R2...')
         if not normalize and not scale:
-            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, 
-                                   olog=olog, y_mean_delog=y_mean_delog, 
-                                   x_vals=xvals, 
+            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean,
+                                   olog=olog, y_mean_delog=y_mean_delog,
+                                   x_vals=xvals,
                                    filters=filters, filtconv=filtconv)
         else:
-            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean, 
-                                   y_std, y_min, y_max, scalelims, 
-                                   olog, y_mean_delog, 
+            test_stats = S.rmse_r2(ftestpred, ftesttrue, y_mean,
+                                   y_std, y_min, y_max, scalelims,
+                                   olog, y_mean_delog,
                                    xvals, filters, filtconv)
         # RMSE
         if np.any(test_stats[0] != -1) and np.any(test_stats[1] != -1):
@@ -856,7 +1639,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             print('  Mean normalized RMSE  : ', np.mean(test_stats[0]))
             print('  Denormalized RMSE     : ', test_stats[1])
             print('  Mean denormalized RMSE: ', np.mean(test_stats[1]))
-            np.savez(outputdir+rmse_file+'_val_norm.npz', 
+            np.savez(outputdir+rmse_file+'_val_norm.npz',
                      rmse=test_stats[0], rmse_mean=np.mean(test_stats[0]))
             saveRMSEnorm   = True
             saveRMSEdenorm = True
@@ -875,14 +1658,20 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             saveRMSEnorm   = False
             saveRMSEdenorm = False
         if saveRMSEnorm:
-            P.plot(''.join([plotdir, rmse_file, '_test_norm.png']), 
-                   xvals, test_stats[0], xlabel, 'RMSE')
-            np.savez(outputdir+rmse_file+'_test_norm.npz', 
+            try:
+                P.plot(''.join([plotdir, rmse_file, '_test_norm.png']),
+                       xvals, test_stats[0], xlabel, 'RMSE')
+            except:
+                print("Normalized RMSE unable to be plotted.")
+            np.savez(outputdir+rmse_file+'_test_norm.npz',
                      rmse=test_stats[0], rmse_mean=np.mean(test_stats[0]))
         if saveRMSEdenorm:
-            P.plot(''.join([plotdir, rmse_file, '_test_denorm.png']), 
-                   xvals, test_stats[1], xlabel, 'RMSE')
-            np.savez(outputdir+rmse_file+'_test_denorm.npz', 
+            try:
+                P.plot(''.join([plotdir, rmse_file, '_test_denorm.png']),
+                       xvals, test_stats[1], xlabel, 'RMSE')
+            except:
+                print("Denormalized RMSE unable to be plotted.")
+            np.savez(outputdir+rmse_file+'_test_denorm.npz',
                      rmse=test_stats[1], rmse_mean=np.mean(test_stats[1]))
         # R2
         if np.any(test_stats[2] != -1) and np.any(test_stats[3] != -1):
@@ -907,43 +1696,47 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             saveR2norm   = False
             saveR2denorm = False
         if saveR2norm:
-            P.plot(''.join([plotdir, r2_file, '_test_norm.png']), 
-                   xvals, test_stats[2], xlabel, '$R^2$')
-            np.savez(outputdir+r2_file+'_test_norm.npz', 
+            try:
+                P.plot(''.join([plotdir, r2_file, '_test_norm.png']),
+                       xvals, test_stats[2], xlabel, '$R^2$')
+            except:
+                print("Normalized R2 unable to be plotted.")
+            np.savez(outputdir+r2_file+'_test_norm.npz',
                      r2=test_stats[2], r2_mean=np.mean(test_stats[2]))
         if saveR2denorm:
-            P.plot(''.join([plotdir, r2_file, '_test_denorm.png']), 
-                   xvals, test_stats[3], xlabel, '$R^2$')
-            np.savez(outputdir+r2_file+'_test_denorm.npz', 
+            try:
+                P.plot(''.join([plotdir, r2_file, '_test_denorm.png']),
+                       xvals, test_stats[3], xlabel, '$R^2$')
+            except:
+                print("Denormalized R2 unable to be plotted.")
+            np.savez(outputdir+r2_file+'_test_denorm.npz',
                      r2=test_stats[3], r2_mean=np.mean(test_stats[3]))
 
     # Plot requested cases
-    if not rng_test:
+    if not rng_test and plot_cases is not None:
         predfoo = sorted(glob.glob(preddir+'test'+os.sep+'pred*'))
         truefoo = sorted(glob.glob(preddir+'test'+os.sep+'true*'))
         if len(predfoo) > 0 and len(truefoo) > 0:
-            print("\nPlotting the requested cases...")
+            print("\nPlotting the requested cases...", flush=True)
             nplot = 0
             for v in plot_cases:
                 fname    = plotdir + 'spec' + str(v) + '_pred-vs-true.png'
                 predspec = np.load(predfoo[v // batch_size])[v % batch_size]
-                predspec = U.denormalize(U.descale(predspec, 
+                predspec = U.denormalize(U.descale(predspec,
                                                    y_min, y_max, scalelims),
                                          y_mean, y_std)
                 truespec = np.load(truefoo[v // batch_size])[v % batch_size]
-                truespec = U.denormalize(U.descale(truespec, 
+                truespec = U.denormalize(U.descale(truespec,
                                                    y_min, y_max, scalelims),
                                          y_mean, y_std)
                 if olog:
                     predspec[olog] = 10**predspec[olog]
                     truespec[olog] = 10**truespec[olog]
-                P.plot_spec(fname, predspec, truespec, xvals, xlabel, ylabel)
+                P.plot_spec(fname, predspec, truespec, xvals, xlabel, ylabel, smoothing)
                 nplot += 1
                 print("  Plot " + str(nplot) + "/" + str(len(plot_cases)), end='\r')
             print("")
         else:
             raise Exception("No predictions found in " + preddir + "test.")
 
-    return
-
-
+    return nn

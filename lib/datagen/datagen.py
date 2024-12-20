@@ -107,20 +107,16 @@ def process_data(cfile, data_dir, preserve=True):
                 badinds = np.where(np.all(stack == -1, axis=-1))[0]
                 stack   = np.delete(stack , badinds, axis=0)
                 pslice  = np.delete(pslice, badinds, axis=0)
-                # Combine arrays so each vector is params then model
-                savearr = np.concatenate((pslice, stack), axis=-1)
-                del pslice, stack
                 # Save the data
                 fsave   = savemodel.replace('.npy', 
-                                     str(n).zfill(len(str(len(fmodels)))) \
-                                     + '.npy')
+                                     str(n).zfill(len(str(len(fmodels)))))
                 if   n < ntr:
-                    np.save(train_dir + fsave, savearr)
+                    save_dir = train_dir
                 elif n < ntr + nval:
-                    np.save(valid_dir + fsave, savearr)
+                    save_dir = valid_dir
                 elif n < ntr + nval + ntest:
-                    np.save(test_dir  + fsave, savearr)
-                del savearr
+                    save_dir = test_dir
+                np.savez(save_dir  + fsave, x=pslice, y=stack)
 
                 if not preserve:
                     out = subprocess.run(['rm', '-f', foo])
