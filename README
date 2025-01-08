@@ -3,17 +3,17 @@
 ===============================================================================
 
 
-Author :       Michael D. Himes    University of Central Florida
-Contact:       mhimes@knights.ucf.edu
+Author :       Michael D. Himes    Morgan State University/NASA GSFC (prev. University of Central Florida)
+Contact:       michael.d.himes@nasa.gov
 
 Advisor:       Joseph Harrington   University of Central Florida
 
-Contributors:  Adam D. Cobb
-                 - plan-net code inspired NN class & training
-               David C. Wright
-                 - containerized the code
-               Zaccheus Scheffer
-                 - assisted with refactoring the codebase that led to MARGE
+Uncredited contributors:  Adam D. Cobb
+                          - plan-net code inspired NN class & training
+                          David C. Wright
+                          - containerized the code
+                          Zaccheus Scheffer
+                          - assisted with refactoring the codebase that led to MARGE
 
 
 Acknowledgements
@@ -25,13 +25,17 @@ that was used throughout development of the software.
 
 Summary
 =======
-MARGE is an all-in-one package to generate exoplanet spectra across a 
-defined parameter space, process the output, and train machine learning (ML) 
-models as a fast approximation to radiative transfer (RT).
+MARGE is a Python package that abstracts the process of optimizing and training 
+neural network (NN) models on labeled data sets.  Users can supply a function to 
+interface MARGE with another code to be used for data generation.  The original 
+use case for MARGE was to generate exoplanet spectra across a defined parameter 
+space using the Bayesian Atmospheric Radiative Transfer (BART) code and train 
+an NN surrogate model for radiative transfer (RT).
 
 MARGE comes with complete documentation as well as a user manual to assist 
 in its usage.  Users can find the latest MARGE User Manual at 
 https://exosports.github.io/MARGE/doc/MARGE_User_Manual.html.
+(Note: it is currently outdated, but updates are in progress.)
 
 MARGE is an open-source project that welcomes improvements from the community 
 to be submitted via pull requests on Github.  To be accepted, such improvements 
@@ -63,7 +67,7 @@ lib/            - Contains the classes and functions of MARGE.
       BARTfunc.py - Modified MCMC function that saves out full spectra.
     datagen.py  - Contains functions for generating/processing data with BART.
     datagen_pypsg.py - As above, but for the pypsg format 
-             (see https://gitlab.com/frontierdevelopmentlab/astrobiology/pypsg).
+                       (see https://github.com/mdhimes/pypsg).
   loader.py     - Contains functions related to loading processed data.
   NN.py         - Contains the NN model class, and a driver function for model 
                   training/validating/testing.
@@ -84,30 +88,30 @@ for more details.
 
 Installation
 ============
-At present, MARGE uses BART, the Bayesian Atmospheric Radiative Transfer
-(BART) code, for data generation.  For details, see the associated user manual 
-in the modules/BART/doc directory.
-
 To build the included conda environment, enter 
     conda env create -f environment.yml
 into a terminal.  Then, activate it via 
     conda activate marge
 
+At present, MARGE only supports using BART for data generation.  For details, 
+see the associated user manual in the modules/BART/doc directory.
 If running MARGE in data generation mode, users must first compile BART's 
 submodules. This can be done by entering
     make bart
 into a terminal while in the MARGE directory.
-This requires SWIG.  If the user does not have SWIG installed, they 
-can easily add SWIG to the current conda environment by entering
+This requires SWIG, which is not included in the default conda environment.  
+If the user does not have SWIG installed, they can easily add SWIG to the 
+current conda environment by entering
     conda install swig
 into the terminal.
 
-Note that the supplied conda environment does not include SWIG.  Also note 
-that it uses tensorflow-gpu, which assumes the user has Nvidia drivers 
+Note that it uses tensorflow-gpu, which assumes the user has Nvidia drivers 
 installed.  If this is not the case, after building the environment, non-GPU 
 users must enter 
     conda remove -n marge tensorflow-gpu
 and follow the prompts.  This will remove the requirement for Nvidia drivers.
+Be aware that not using a GPU will require significantly longer times to 
+execute MARGE.
 
 For more details, see the MARGE User Manual.
 
@@ -116,37 +120,45 @@ Executing MARGE
 ===============
 MARGE has 2 execution modes: data generation, and ML model training.
 
-As mentioned above, data generation is handled via BART.
-Before data generation can begin, users must first generate a TLI file via 
-pylineread, BART's line list-processing code.  To do so, input
-    make TLI cfile=<path/to/configration file>
-to call pylineread with a configuration file.  For details on how to set this 
-up, see the pylineread directory within BART's RT module, transit.
-
-After generating a TLI file, data generation can begin.  After setting up the 
-MARGE configuration file, run MARGE via
+After setting up the MARGE configuration file, run MARGE via
     ./MARGE.py <path/to/configuration file>
 
-Note that data generation requires a BART configuration file.  In order to save 
-the data, the BART config file must have the 'savemodel' parameter set to 
-<name>.npy.  This config file must also have the 'modelper' parameter set; this 
-controls the number of iterations per chain to save out each model file, to 
-ensure that the evaluated models will fit in memory.  If the models will fit in 
-memory as a single array, set modelper=0 to save out a single file with all 
-models.  If modelper>0, the generated .npy files will be saved to a subdirectory
-within BART's output directory, named <name> from the 'savemodel' parameter.
+Data generation is handled via a user-provided function to interface with 
+some other code.  At present, MARGE only includes such a function for BART.
+Note that in some cases (e.g., the quick_example case in the example/ 
+subdirectory), it is simpler to generate the data without using MARGE, then 
+ingest that data into MARGE.
 
-For a detailed example walkthrough, see the README in the example/ subdirectory 
-or the user manual.
+Before data generation via BART can begin, users must first generate a TLI 
+file via pylineread, BART's line list-processing code.  To do so, input
+    make TLI cfile=<path/to/configration file>
+to call pylineread with a configuration file.  For details on how to set this 
+up, see the pylineread directory within BART's RT module, transit.  After 
+generating a TLI file, data generation can begin.
+
+Note that data generation via BART requires a BART configuration file.  In order 
+to save the data, the BART config file must have the 'savemodel' parameter set to 
+<name>.npy, where <name> is some user-chosen prefix.  This config file must also 
+have the 'modelper' parameter set; this controls the number of iterations per 
+chain to save out each model file, to ensure that the evaluated models will fit 
+in memory.  If the models will fit in memory as a single array, set modelper=0 
+to save out a single file with all models.  If modelper>0, the generated .npy 
+files will be saved to a subdirectory within BART's output directory, named 
+<name> from the 'savemodel' parameter.
+
+For a detailed example walkthrough, see the README in the example/BART_example/ 
+subdirectory or the user manual.
 
 
 ML Model Training: Data
 -----------------------
 If training an ML model using MARGE, data must be formatted a particular way.
-At present, MARGE has a single allowed format, which is a 2D array saved as a 
-.NPY file.  Each row corresponds to a unique case.  Each column corresponds to 
-the inputs followed by the outputs, e.g.,
-[input0, input1, input2, ..., output0, output1, output2, ...]
+At present, MARGE requires that the files are Numpy zipped archives (NPZ).  
+Each NPZ file must contain named data sets of 'x' for inputs and 'y' for 
+outputs.  All other named data sets are ignored at present.  The 'x' and 'y' 
+arrays must be at least 2D, where the 0th axis corresponds to each data case.  
+For example, arr['x'][0] would be the inputs for one data case in the 
+data set.  Each data case can contain as many dimensions as necessary.
 
 Users are encouraged to introduce additions to loader.py to allow additional 
 data formats, which would be specified in the configuration file.  
@@ -156,8 +168,8 @@ Please submit any such modifications via pull requests on Github.
 Setting Up a MARGE Configuration File
 =====================================
 A MARGE configuration file contains many options, which are detailed in this 
-section.  For an example, see config.cfg in the example subdirectory, and the 
-associated README with instructions on execution.
+section.  For examples, see MARGE*.cfg files in the example subdirectories 
+and their associated READMEs with instructions on execution.
 
 Directories
 -----------
@@ -309,19 +321,15 @@ Versions
 ========
 MARGE was developed on a Unix/Linux machine using the following 
 versions of packages:
- - Python 3.7.2
- - Keras 2.2.4
- - Numpy 1.16.2
- - Matplotlib 3.0.2
- - mpi4py 3.0.3
- - Scipy 1.2.1
- - sklearn 0.20.2
- - Tensorflow 1.13.1
+ - Python 3.12.8
+ - Keras 3.7.0
+ - Numpy 1.26.4
+ - Matplotlib 3.10.0
+ - Scipy 1.14.1
+ - sklearn 1.6.0
+ - Tensorflow 2.17.0
  - CUDA 9.1.85
  - cuDNN 7.5.00
- - ONNX 1.6.0
- - keras2onnx 1.6.1
- - onnx2keras 0.0.22
 
 MARGE also requires a working MPI distribution if using BART for 
 data generation.  MARGE was developed using MPICH version 3.3.2.
