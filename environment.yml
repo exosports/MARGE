@@ -9,6 +9,7 @@ dependencies:
   - matplotlib=3.10.0
   - numpy=1.26.4
   - optuna=4.1.0
+  - optuna-integration=4.1.0
   - scikit-learn=1.6.0
   - scipy=1.14.1
   - tensorflow-gpu=2.17.0
