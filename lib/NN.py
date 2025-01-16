@@ -1492,7 +1492,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                  clr_mode, clr_steps,
                  weight_file, stop_file='./STOP',
                  train_flag=False, shuffle=False, resume=False)
-    if '.h5' in weight_file or '.hdf5' in weight_file:
+    if '.h5' in weight_file or '.hdf5' in weight_file or '.keras' in weight_file:
         nn.model.load_weights(weight_file) # Load the model
         # Save in ONNX format
         try:
