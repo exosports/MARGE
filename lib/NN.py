@@ -70,8 +70,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 
 class ConcreteDropout(Layer):
-  """Just your regular densely-connected NN layer, 
-     plus a trainable dropout parameter.
+  """NOTE: does not yet work with MARGE v2.
+  
+  Just your regular densely-connected NN layer, 
+  plus a trainable dropout parameter.
 
   `Dense` implements the operation:
   `output = activation(dot(input, kernel) + bias)`
@@ -766,7 +768,6 @@ class NNModel:
                         #x, loss = ConcreteDropout(Dense(nodes[n], activation=activations[n]), 
                         #                    weight_regularizer=wd, 
                         #                    dropout_regularizer=dd)(x)
-                    print("********DEBUG Calling ConcreteDropout", flush=True)
                     x, loss = ConcreteDropout(nodes[n], activation=activations[n], 
                                               weight_regularizer=wd, 
                                               dropout_regularizer=dd,
@@ -1417,44 +1418,52 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             print("  Maximum learning rate:", optmaxlr)
         if opttime is not None:
             print("  Time limit:", opttime/60./60., "hrs")
-        with dask.distributed.Client() as client:
-            storage = optuna.integration.dask.DaskStorage()
-            sampler = optuna.samplers.TPESampler(n_startup_trials=5)
-            study = optuna.create_study(storage=storage, sampler=sampler, direction='minimize')
+        #with dask.distributed.Client() as client:
+        if optngpus>1:
+            client = dask.distributed.Client()
             futures = []
-            if optnnode is not None and optmaxconvnode is not None:
-                optconvnode = [val for val in optnnode if val <= optmaxconvnode]
-            else:
-                optconvnode = None
-            for i in range(optngpus):
-                if optfunc is None:
-                    optfunc = objective
-                theobjective = functools.partial(optfunc,
-                            ftrain_TFR=ftrain_TFR, fvalid_TFR=fvalid_TFR, ftest_TFR=ftest_TFR,
-                            weight_file=weight_file, ishape=ishape, oshape=oshape, olog=olog,
-                            x_mean=x_mean, x_std=x_std, y_mean=y_mean, y_std=y_std,
-                            x_min=x_min,   x_max=x_max, y_min=y_min,   y_max=y_max, scalelims=scalelims,
-                            ncores=ncores, buffer_size=buffer_size, batch_size=batch_size,
-                            nbatches=[train_batches, valid_batches, test_batches],
-                            lossfunc=lossfunc, lengthscale=lengthscale, max_lr=max_lr,
-                            clr_mode=clr_mode, clr_steps=clr_steps,
-                            optnlays=optnlays, optlayer=optlayer, optnnode=optnnode, optconvnode=optconvnode,
-                            optactiv=optactiv, optactrng=optactrng,
-                            optminlr=optminlr, optmaxlr=optmaxlr,
-                            nodes=nodes, layers=layers, kernel_regularizer=kernel_regularizer, 
-                            epochs=epochs, patience=patience, igpu=i)
+            storage = optuna.integration.dask.DaskStorage()
+        else:
+            storage = None
+        sampler = optuna.samplers.TPESampler(n_startup_trials=5)
+        study = optuna.create_study(storage=storage, sampler=sampler, direction='minimize')
+        if optnnode is not None and optmaxconvnode is not None:
+            optconvnode = [val for val in optnnode if val <= optmaxconvnode]
+        else:
+            optconvnode = None
+        for i in range(optngpus):
+            if optfunc is None:
+                optfunc = objective
+            theobjective = functools.partial(optfunc,
+                        ftrain_TFR=ftrain_TFR, fvalid_TFR=fvalid_TFR, ftest_TFR=ftest_TFR,
+                        weight_file=weight_file, ishape=ishape, oshape=oshape, olog=olog,
+                        x_mean=x_mean, x_std=x_std, y_mean=y_mean, y_std=y_std,
+                        x_min=x_min,   x_max=x_max, y_min=y_min,   y_max=y_max, scalelims=scalelims,
+                        ncores=ncores, buffer_size=buffer_size, batch_size=batch_size,
+                        nbatches=[train_batches, valid_batches, test_batches],
+                        lossfunc=lossfunc, lengthscale=lengthscale, max_lr=max_lr,
+                        clr_mode=clr_mode, clr_steps=clr_steps,
+                        optnlays=optnlays, optlayer=optlayer, optnnode=optnnode, optconvnode=optconvnode,
+                        optactiv=optactiv, optactrng=optactrng,
+                        optminlr=optminlr, optmaxlr=optmaxlr,
+                        nodes=nodes, layers=layers, kernel_regularizer=kernel_regularizer, 
+                        epochs=epochs, patience=patience, igpu=i)
+            if optngpus>1:
                 futures.append(client.submit(study.optimize, theobjective, n_trials=optimize, timeout=opttime, pure=False))
-            dask.distributed.wait(futures)
-            print("\nHyperparameter optimization complete.  Best trial:", flush=True)
-            for key, value in study.best_trial.params.items():
-                print("  {}: {}".format(key, value))
-            trials = study.get_trials()
-            with open(os.path.join(outputdir, "optuna-study.dat"), "wb") as foo:
-                pickle.dump(trials, foo)
-            if optlayer is not None:
-                U.write_ordered_optuna_summary(os.path.join(outputdir, 'optuna-ordered-summary.txt'), trials, optlayer)
             else:
-                U.write_ordered_optuna_summary(os.path.join(outputdir, 'optuna-ordered-summary.txt'), trials, layers, nodes)
+                study.optimize(theobjective, n_trials=optimize, timeout=opttime)
+        if optngpus>1:
+            dask.distributed.wait(futures)
+        print("\nHyperparameter optimization complete.  Best trial:", flush=True)
+        for key, value in study.best_trial.params.items():
+            print("  {}: {}".format(key, value))
+        trials = study.get_trials()
+        with open(os.path.join(outputdir, "optuna-study.dat"), "wb") as foo:
+            pickle.dump(trials, foo)
+        if optlayer is not None:
+            U.write_ordered_optuna_summary(os.path.join(outputdir, 'optuna-ordered-summary.txt'), trials, optlayer)
+        else:
+            U.write_ordered_optuna_summary(os.path.join(outputdir, 'optuna-ordered-summary.txt'), trials, layers, nodes)
         return
 
     # Train a model
