@@ -409,6 +409,15 @@ def MARGE(confile):
             if processdat:
                 print('\nMode: Process data\n')
                 D.process_data(inputdir+cfile, datadir, preservedat)
+            
+            ### Get data set sizes #############################################
+            set_nbatches = U.get_data_set_sizes(fsize, datadir, ishape, oshape, 
+                                                batch_size, ncores)
+            train_batches, valid_batches, test_batches = set_nbatches
+            
+            ### Ensure TFRecords exist, and that they don't need updating ######
+            fTFR = U.check_TFRecords(inputdir, TFRfile, datadir, ilog, olog, 
+                                     batch_size, train_batches, valid_batches, test_batches)
 
             ### Train model(s) #################################################
             if NNmodel:
@@ -417,9 +426,9 @@ def MARGE(confile):
                           trainflag, validflag, testflag,
                           normalize, fxmean, fxstd, fymean, fystd,
                           scale, fxmin, fxmax, fymin, fymax, scalelims,
-                          fsize, rmse_file, r2_file, statsaxes,
+                          rmse_file, r2_file, statsaxes,
                           ishape, oshape, ilog, olog,
-                          TFRfile, batch_size, ncores, buffer_size,
+                          fTFR, batch_size, set_nbatches, ncores, buffer_size,
                           optimize, optfunc, optngpus, opttime, optnlays, optlayer,
                           optnnode, optactiv, optactrng, optminlr, optmaxlr, optmaxconvnode,
                           gridsearch, architectures,

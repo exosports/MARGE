@@ -16,6 +16,9 @@ count_cases: Helper function for multiprocessing.
 
 data_set_size: Calculates the number of cases in a data set.
 
+get_data_set_sizes:  Calls data_set_size and calculates the number of batches 
+                     in each data subset.
+
 concatdat: Handles concatenation of non-contiguous data within a data set.
            Not currently used by MARGE.
 
@@ -41,6 +44,10 @@ get_TFR_file_names: Loads file names of the TFRecords files.
 _parse_function: Helper function for loading TFRecords dataset objects.
 
 load_TFdataset: Loads a TFRecords dataset for usage.
+
+check_TFRecords: Checks if TFRecords files need to be (re)created.
+
+write_ordered_optuna_summary: Saves a human-readable summary of an Optuna run.
 
 """
 
@@ -81,7 +88,7 @@ def make_dir(some_dir):
     return
 
 
-def load_path(key, basedir):
+def load_path(key, basedir=""):
     """
     Helper function for reading in config parameters with file paths.
     Returns an absolute path.
@@ -257,7 +264,10 @@ def data_set_size(foos, ishape, oshape, ncores=1):
     Inputs
     ------
     foos: list, strings. Files of the data set.
-
+    ishape: tuple, ints. Dimensionality of the input  data, without the batch size.
+    oshape: tuple, ints. Dimensionality of the output data, without the batch size.
+    ncores: int.  Number of cores to use to load data in parallel.  Default: 1.
+    
     Outputs
     -------
     ncases: int. Number of cases in the data set.
@@ -276,11 +286,73 @@ def data_set_size(foos, ishape, oshape, ncores=1):
     return np.sum(ncases)
 
 
+def get_data_set_sizes(fsize, datadir, ishape, oshape, batch_size, ncores=1):
+    """
+    Counts the number of data cases in each subset and computes the number of 
+    batches per subset.
+    
+    Inputs
+    ------
+    fsize: string.  Path to save file containing number of data cases in each subset.
+    datadir: string.  Path to directory holding the training, validation, and test subsets.
+    ishape: tuple, ints. Dimensionality of the input  data, without the batch size.
+    oshape: tuple, ints. Dimensionality of the output data, without the batch size.
+    batch_size: int.  Size of batches for training/validating/testing.
+    ncores: int.  Number of cores to use to load data in parallel.  Default: 1.
+    
+    Outputs
+    -------
+    train_batches: int.  Number of batches in the training   set.
+    valid_batches: int.  Number of batches in the validation set.
+    test_batches : int.  Number of batches in the test       set.
+    """
+    print('Loading files & calculating total number of batches...', flush=True)
+    
+    # Check if we can depend on `fsize` or if we need to (re)create it
+
+    try:
+        datsize   = np.load(fsize)
+        num_train = datsize[0]
+        num_valid = datsize[1]
+        num_test  = datsize[2]
+    except:
+        num_train = data_set_size(glob.glob(datadir + 'train' + os.sep + '*.npz'), ishape, oshape, ncores)
+        num_valid = data_set_size(glob.glob(datadir + 'valid' + os.sep + '*.npz'), ishape, oshape, ncores)
+        num_test  = data_set_size(glob.glob(datadir + 'test'  + os.sep + '*.npz'), ishape, oshape, ncores)
+        np.save(fsize, np.array([num_train, num_valid, num_test], dtype=int))
+    
+    if not num_train:
+        raise ValueError("No training data provided.\n"+\
+                         "Are you sure your data are located at\n"+\
+                         datadir+'train'+os.sep+'*.npz?')
+    if not num_valid:
+        raise ValueError("No validation data provided.\n"+\
+                         "Are you sure your data are located at\n"+\
+                         datadir+'valid'+os.sep+'*.npz?')
+    if not num_test:
+        raise ValueError("No test data provided.\n"+\
+                         "Are you sure your data are located at\n"+\
+                         datadir+'test'+os.sep+'*.npz?')
+
+    print("Data set sizes")
+    print("--------------")
+    print("Training   data:", num_train)
+    print("Validation data:", num_valid)
+    print("Testing    data:", num_test)
+    print("Total          :", num_train + num_valid + num_test)
+    
+    train_batches = num_train // batch_size
+    valid_batches = num_valid // batch_size
+    test_batches  = num_test  // batch_size
+
+    return train_batches, valid_batches, test_batches
+
+
 def concatdat(xi, xlen, yi, ylen,
               arr1, arr2):
     """
     Helper function to handle slicing and concatenation of non-contiguous data.
-    Not used by MARGE, but left available in case a user wishes to utilize it.
+    No longer used by MARGE, but left available in case a user wishes to utilize it.
 
     Inputs
     ------
@@ -408,7 +480,7 @@ def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def make_TFRecord(fname, files, ilog, olog,
+def make_TFRecord(fname, files, ilog, olog, 
                   batch_size, e_batches, split=1, verb=1):
     """
     Function to write TFRecords for large data sets.
@@ -417,8 +489,8 @@ def make_TFRecord(fname, files, ilog, olog,
     ------
     fname: string. Base name for TFRecords files
     files: list, strings. Files to process into TFRecords.
-    ilog : bool. Determines if to take the log of inputs/features
-    olog : bool. Determines if to take the log of outputs/targets
+    ilog : bool or array of bools. Determines if to take the log of inputs/features.
+    olog : bool or array of bools. Determines if to take the log of outputs/targets.
     batch_size: int. Size of batches for training.
     e_batches : int. Expected number of batches to be processed.
     split: int. Determines the number of `files` to process before
@@ -449,6 +521,13 @@ def make_TFRecord(fname, files, ilog, olog,
                 raise ValueError("The inputs and outputs of this file do not "+\
                                  "have the same number of cases:\n"           +\
                                  files[i*split+j])
+            # Save/check typing
+            if not i and not j:
+                xdtype = x.dtype
+                ydtype = y.dtype
+            else:
+                assert x.dtype == xdtype, "x array data type in file "+files[i*split+j]+" does not match data type in file "+files[0]
+                assert y.dtype == ydtype, "y array data type in file "+files[i*split+j]+" does not match data type in file "+files[0]
             filesleft -= 1
             # Print progress updates
             if verb:
@@ -482,7 +561,7 @@ def make_TFRecord(fname, files, ilog, olog,
                         print("Ended writing TFRecords to ensure " + \
                               "N*batch_size entries.")
                         print("Writing TFRecords file complete.")
-                    return
+                    return xdtype, ydtype
         writer.close()
     if verb:
         print("100% complete")
@@ -490,10 +569,10 @@ def make_TFRecord(fname, files, ilog, olog,
         print("Writing TFRecords file complete.")
         print(N_batches, 'batches written,', e_batches, 'batches expected.')
         print(count, 'remaining count.')
-    return
+    return xdtype, ydtype
 
 
-def _parse_function(proto, ishape, oshape,
+def _parse_function(proto, ishape, oshape, xdtype, ydtype, 
                     x_mean=None, x_std=None, y_mean=None, y_std=None,
                     x_min=None,  x_max=None, y_min=None,  y_max=None,
                     scalelims=None):
@@ -505,6 +584,8 @@ def _parse_function(proto, ishape, oshape,
     proto : object. Tensorflow Dataset.
     ishape: tuple, ints. Shape of the input  data.
     oshape: tuple, ints. Shape of the output data.
+    xdtype: obj.  Data type of the input  data.
+    ydtype: obj.  Data type of the output data.
     x_mean: array.  Mean  values of input  data.
     x_std : array.  Stdev values of input  data.
     y_mean: array.  Mean  values of output data.
@@ -528,13 +609,13 @@ def _parse_function(proto, ishape, oshape,
     parsed_features = tf.io.parse_single_example(proto, keys_to_features)
 
     # Turn string into array
-    x = tf.io.decode_raw(parsed_features["x"], tf.float64)
-    y = tf.io.decode_raw(parsed_features["y"], tf.float64)
+    x = tf.io.decode_raw(parsed_features["x"], tf.dtypes.as_dtype(xdtype))
+    y = tf.io.decode_raw(parsed_features["y"], tf.dtypes.as_dtype(ydtype))
 
     # Make sure it has the right shape
     x = tf.reshape(x, ishape)
     y = tf.reshape(y, oshape)
-
+    
     # Parameters to process data
     norm    = (x_mean, x_std, y_mean, y_std)
     scaling = (x_min,  x_max, y_min,  y_max, scalelims)
@@ -562,7 +643,7 @@ def _parse_function(proto, ishape, oshape,
 
 
 def load_TFdataset(files, ncores, batch_size, buffer_size,
-                   ishape, oshape,
+                   ishape, oshape, 
                    x_mean=None, x_std=None, y_mean=None, y_std=None,
                    x_min=None,  x_max=None, y_min=None,  y_max=None,
                    scalelims=None, shuffle=False):
@@ -600,9 +681,14 @@ def load_TFdataset(files, ncores, batch_size, buffer_size,
         ignore_order = tf.data.Options()
         ignore_order.experimental_deterministic = False
         dataset = dataset.with_options(ignore_order)
+    # Load dtype info needed for parse_function
+    fdtype = os.path.join(os.path.dirname(files[0]), 'dtype.npz')
+    dtype_data = np.load(fdtype)
     # Make static parse_function
     parse_function = functools.partial(_parse_function,
                                        ishape=ishape, oshape=oshape,
+                                       xdtype=dtype_data['xdtype'].dtype, 
+                                       ydtype=dtype_data['ydtype'].dtype, 
                                        x_mean=x_mean, x_std=x_std,
                                        y_mean=y_mean, y_std=y_std,
                                        x_min=x_min,   x_max=x_max,
@@ -622,7 +708,254 @@ def load_TFdataset(files, ncores, batch_size, buffer_size,
     return dataset
 
 
-def write_ordered_optuna_summary(fout, trials, optlayer, optnodes=None, nprint=-1, width=9):
+def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog, 
+                    batch_size, train_batches, valid_batches, test_batches):
+    """
+    Checks if TFRecords files exist.
+    If they don't, creates the TFRecords files.
+    If they do, checks timestamps to know if they need to be re-created.
+    
+    Inputs
+    ------
+    inputdir: string. Path/to/directory of inputs.
+    TFRfile: string.  Prefix for TFRecords filenames.
+    datadir: string.  Path/to/directory of data.
+    batch_size: int.  Size of batches for training/validating/testing.
+    train_batches: int.  Number of training batches.
+    valid_batches: int.  Number of validation batches.
+    test_batches:  int.  Number of test batches.
+    
+    Outputs
+    -------
+    ftrain_TFR: list of strings.  TFRecords training   files.
+    fvalid_TFR: list of strings.  TFRecords validation files.
+    ftest_TFR:  list of strings.  TFRecords test       files.
+    """
+    print('\nLoading TFRecords file names...', flush=True)
+    TFRpath = os.path.join(inputdir, 'TFRecords', TFRfile)
+    ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
+    fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
+    ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
+
+    ftrain_NPZ = glob.glob(datadir + 'train' + os.sep + '*.npz')
+    fvalid_NPZ = glob.glob(datadir + 'valid' + os.sep + '*.npz')
+    ftest_NPZ  = glob.glob(datadir + 'test'  + os.sep + '*.npz')
+    
+    # File for dtypes
+    fdtype = os.path.join(inputdir, 'TFRecords', 'dtype.npz')
+    if os.path.exists(fdtype):
+        last_dtype = np.load(fdtype)
+        last_xdtype = last_dtype['xdtype'].dtype
+        last_ydtype = last_dtype['ydtype'].dtype
+    else:
+        last_xdtype = None
+        last_ydtype = None
+    
+    # Look for the logarithm info file
+    flog = os.path.join(inputdir, 'TFRecords', 'log.npz')
+    if not os.path.exists(flog):
+        # We don't know which indices were log-scaled, if any
+        # Force the TFRecords to be made this time
+        ftrain_TFR = []
+        fvalid_TFR = []
+        ftest_TFR  = []
+        same_logarithm = False
+    else:
+        # Check if the current run matches what was used last time
+        last_log = np.load(flog)
+        last_ilog = last_log['ilog']
+        last_olog = last_log['olog']
+        same_logarithm = np.all(last_ilog == ilog) and np.all(last_olog == olog)
+        if not same_logarithm:
+            print("New logarithm pre-processing found.  Re-creating TFRecords.", flush=True)
+    
+    # Modification time of this file
+    last_changed = os.path.getmtime(__file__)
+    
+    if len(ftrain_TFR) == 0:
+        print("Making TFRecords for training data...", flush=True)
+        make_train = True
+    else:
+        # Check most recent modification times
+        time_NPZ = os.path.getmtime(max(ftrain_NPZ, key=os.path.getmtime))
+        time_TFR = os.path.getmtime(max(ftrain_TFR, key=os.path.getmtime))
+                
+        if time_NPZ > time_TFR or last_changed > time_TFR:
+            if time_NPZ > time_TFR:
+                print("Most recent training NPZ file is newer than training TFRecords.")
+            elif last_changed > time_TFR:
+                print("Most recent change to utils.py is newer than training TFRecords.")
+            print("Re-creating TFRecords for training data...", flush=True)
+            # Delete all existing TFRecords
+            for foo in ftrain_TFR:
+                try:
+                    os.remove(foo)
+                except Exception as e:
+                    print("Error deleting", foo, ":", e)
+            make_train = True
+        else:
+            make_train = False
+    if make_train or not same_logarithm:
+        xdtype_train, ydtype_train = make_TFRecord(TFRpath + 'train.tfrecords',
+                                                   ftrain_NPZ, ilog, olog, 
+                                                   batch_size, train_batches)
+        ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
+    else:
+        xdtype_train = None
+        ydtype_train = None
+
+    if len(fvalid_TFR) == 0:
+        print("\nMaking TFRecords for validation data...", flush=True)
+        make_valid = True
+    else:
+        # Check most recent modification times
+        time_NPZ = os.path.getmtime(max(fvalid_NPZ, key=os.path.getmtime))
+        time_TFR = os.path.getmtime(max(fvalid_TFR, key=os.path.getmtime))
+        if time_NPZ > time_TFR or last_changed > time_TFR:
+            if time_NPZ > time_TFR:
+                print("Most recent validation NPZ file is newer than validation TFRecords.")
+            elif last_changed > time_TFR:
+                print("Most recent change to utils.py is newer than validation TFRecords.")
+            print("Re-creating TFRecords for validation data...", flush=True)
+            # Delete all existing TFRecords
+            for foo in fvalid_TFR:
+                try:
+                    os.remove(foo)
+                except Exception as e:
+                    print("Error deleting", foo, ":", e)
+            make_valid = True
+        else:
+            make_valid = False
+    if make_valid or not same_logarithm:
+        xdtype_valid, ydtype_valid = make_TFRecord(TFRpath + 'valid.tfrecords',
+                                                   fvalid_NPZ, ilog, olog, 
+                                                   batch_size, valid_batches)
+        fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
+    else:
+        xdtype_valid = None
+        ydtype_valid = None
+
+    if len(ftest_TFR) == 0:
+        print("\nMaking TFRecords for test data...", flush=True)
+        make_test = True
+    else:
+        # Check most recent modification times
+        time_NPZ = os.path.getmtime(max(ftest_NPZ, key=os.path.getmtime))
+        time_TFR = os.path.getmtime(max(ftest_TFR, key=os.path.getmtime))
+        if time_NPZ > time_TFR or last_changed > time_TFR:
+            if time_NPZ > time_TFR:
+                print("Most recent test NPZ file is newer than test TFRecords.")
+            elif last_changed > time_TFR:
+                print("Most recent change to utils.py is newer than test TFRecords.")
+            print("Re-creating TFRecords for test data...", flush=True)
+            # Delete all existing TFRecords
+            for foo in ftest_TFR:
+                try:
+                    os.remove(foo)
+                except Exception as e:
+                    print("Error deleting", foo, ":", e)
+            make_test = True
+        else:
+            make_test = False
+    if make_test or not same_logarithm:
+        xdtype_test, ydtype_test = make_TFRecord(TFRpath + 'test.tfrecords',
+                                                 ftest_NPZ, ilog, olog, 
+                                                 batch_size, test_batches)
+        ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
+    else:
+        xdtype_test = None
+        ydtype_test = None
+    
+    # Ensure dtypes all match
+    if (make_train and make_valid) or not same_logarithm:
+        assert xdtype_train == xdtype_valid, "Training x array dtype is "+\
+                                             str(xdtype_train)+\
+                                             ", but validation x array dtype "+\
+                                             "is "+str(xdtype_valid)
+        assert ydtype_train == ydtype_valid, "Training y array dtype is "+\
+                                             str(ydtype_train)+\
+                                             ", but validation y array dtype "+\
+                                             "is "+str(ydtype_valid)
+    if (make_train and make_test) or not same_logarithm:
+        assert xdtype_train == xdtype_test,  "Training x array dtype is "+\
+                                             str(xdtype_train)+\
+                                             ", but test x array dtype is "+\
+                                             str(xdtype_test)
+        assert ydtype_train == ydtype_test,  "Training y array dtype is "+\
+                                             str(ydtype_train)+\
+                                             ", but test y array dtype is "+\
+                                             str(ydtype_test)
+    if (make_valid and make_test) or not same_logarithm:
+        assert xdtype_valid == xdtype_test,  "Validation x array dtype is "+\
+                                             str(xdtype_valid)+\
+                                             ", but test x array dtype is "+\
+                                             str(xdtype_test)
+        assert ydtype_valid == ydtype_test,  "Validation y array dtype is "+\
+                                             str(ydtype_valid)+\
+                                             ", but test y array dtype is "+\
+                                             str(ydtype_test)
+
+    # Compare vs. old dtypes, if applicable
+    if xdtype_train is not None:
+        xdtype = xdtype_train
+    elif xdtype_valid is not None:
+        xdtype = xdtype_valid
+    elif xdtype_test is not None:
+        xdtype = xdtype_test
+    else:
+        xdtype = None
+    if ydtype_train is not None:
+        ydtype = ydtype_train
+    elif ydtype_valid is not None:
+        ydtype = ydtype_valid
+    elif ydtype_test is not None:
+        ydtype = ydtype_test
+    else:
+        ydtype = None
+    
+    if not (make_train and make_valid and make_test) and same_logarithm:
+        # Not all TFRecords were created this time
+        # Check that dtypes are still consistent with the previous processing
+        if last_xdtype is not None and xdtype is not None:
+            assert last_xdtype == xdtype, "X array dtype from the current "   +\
+                                          "TFRecords processing does not "    +\
+                                          "match the dtype from the previous "+\
+                                          "processing."
+        if last_ydtype is not None and ydtype is not None:
+            assert last_ydtype == ydtype, "Y array dtype from the current "   +\
+                                          "TFRecords processing does not "    +\
+                                          "match the dtype from the previous "+\
+                                          "processing."
+
+
+    if make_train or make_valid or make_test or not same_logarithm:
+        print("\nTFRecords creation complete.", flush=True)
+        # Save new ilog and olog files
+        np.savez(flog.replace('.npz', ''), ilog=ilog, olog=olog)
+        # Save dtype info so that it can be used when loading TFRecords
+        np.savez(fdtype.replace('.npz', ''), xdtype=np.array([], dtype=xdtype), 
+                                             ydtype=np.array([], dtype=ydtype))
+    else:
+        print("\nTFRecords already exist.", flush=True)
+
+    return ftrain_TFR, fvalid_TFR, ftest_TFR
+
+
+def write_ordered_optuna_summary(fout, trials, optlayer, 
+                                 optnodes=None, nprint=-1, width=9):
+    """
+    Writes results of Optuna Bayesian optimization run to human-readable text file.
+    
+    Inputs
+    ------
+    fout: str.  Output file to save the results.
+    trials: list of trial objects.  Trials considered in the optimization run.
+    optlayer: list of str.  Layer types that were considered in the optimization.
+    optnodes: list of int.  Number of nodes per layer, if it was not varied in the optimization.
+                            If the number of nodes per layer was optimized, set this variable to None (default).
+    nprint: int.  Number of trials to write to file.  If -1, it writes all trials (default).
+    width: int.  Width of each cell in the output file.
+    """
     if nprint == -1:
         nprint = len(trials)
     minvalloss = np.zeros(len(trials))
@@ -632,7 +965,6 @@ def write_ordered_optuna_summary(fout, trials, optlayer, optnodes=None, nprint=-
             minvalloss[i] = trial.values[0]
         else:
             minvallloss[i] = np.inf # Model was not trained
-        #maxlayers = max(maxlayers, trial.params['layers'])
     iorder = np.argsort(minvalloss)
     nrank = len(str(nprint))
     hdr = "|".join(["#".center(nrank)] + \
@@ -658,10 +990,6 @@ def write_ordered_optuna_summary(fout, trials, optlayer, optnodes=None, nprint=-
                 else:
                     nodes.append("None")
             elif "nodes_"+str(j+1) in trials[i].params.keys():
-                #if "layer_"+str(j+1) in trials[i].params.keys():
-                #    layers.append(trials[i].params["layer_"+str(j+1)])
-                #else:
-                #    layers.append('dense') #replace with parameter from trial when comparing dense and conv layers
                 layers.append(optlayer[j])
                 nodes.append(trials[i].params["nodes_"+str(j+1)])
             else:

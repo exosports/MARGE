@@ -13,3 +13,4 @@ dependencies:
   - scikit-learn=1.6.0
   - scipy=1.14.1
   - tensorflow-gpu=2.17.0
+  - tf2onnx=1.16.1

@@ -49,16 +49,15 @@ from tensorflow.keras import regularizers
 from tensorflow.python.ops import gen_math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python import debug as tf_debug
-#from tensorflow.python.framework.ops import disable_eager_execution
-
-#disable_eager_execution()
 
 import optuna
 import dask.distributed
 
-#import onnx
-#import keras2onnx
 #from   onnx2keras import onnx_to_keras
+try:
+    import tf2onnx
+except:
+    pass
 
 import callbacks as C
 import loader    as L
@@ -70,9 +69,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 
 class ConcreteDropout(Layer):
-  """NOTE: does not yet work with MARGE v2.
-  
-  Just your regular densely-connected NN layer, 
+  """Just your regular densely-connected NN layer, 
   plus a trainable dropout parameter.
 
   `Dense` implements the operation:
@@ -305,7 +302,8 @@ class ConcreteDropout(Layer):
       outputs = self.activation(outputs)
     
     return outputs, regularizer
-
+  """
+  # No longer needed w/ newer versions of TF.  Left here for posterity.
   def compute_output_shape(self, input_shape):
     input_shape = tensor_shape.TensorShape(input_shape)
     input_shape = input_shape.with_rank_at_least(2)
@@ -314,7 +312,7 @@ class ConcreteDropout(Layer):
           'The innermost dimension of input_shape must be defined, but saw: %s'
           % (input_shape,))
     return input_shape[:-1].concatenate(self.units)
-
+  """
   def get_config(self):
     config = super(ConcreteDropout, self).get_config()
     config.update({
@@ -569,10 +567,12 @@ class NNModel:
     __init__: Initialization of the NN model.
 
     train: Trains the NN model.
+    
+    Yeval: Makes predictions on the chosen dataset and saves them as NPY files.
     """
 
     def __init__(self, ftrain_TFR, fvalid_TFR, ftest_TFR,
-                 ishape, oshape, olog,
+                 ishape, oshape, ilog, olog,
                  x_mean, x_std, y_mean, y_std,
                  x_min,  x_max, y_min,  y_max, scalelims,
                  ncores, buffer_size, batch_size, nbatches,
@@ -591,7 +591,8 @@ class NNModel:
         ftest_TFR  : list, strings. TFRecords for the test       data.
         ishape     : tuple, ints. Shape of the input  data.
         oshape     : tuple, ints. Shape of the output data.
-        olog       : bool.  Determines if the target values are log10-scaled.
+        ilog       : bool or array of bool.  Determines if the input  values are log10-scaled.
+        olog       : bool or array of bool.  Determines if the target values are log10-scaled.
         x_mean     : array. Mean  values of the input  data.
         x_std      : array. Stdev values of the input  data.
         y_mean     : array. Mean  values of the output data.
@@ -639,19 +640,16 @@ class NNModel:
             K.set_session(sess)
 
         # Load data
-        #self.X,    self.Y    
         self.train_dataset   = U.load_TFdataset(ftrain_TFR, ncores, batch_size,
                                                 buffer_size, ishape, oshape,
                                                 x_mean, x_std, y_mean, y_std,
                                                 x_min,  x_max, y_min,  y_max,
                                                 scalelims, shuffle)
-        #self.Xval, self.Yval 
         self.valid_dataset   = U.load_TFdataset(fvalid_TFR, ncores, batch_size,
                                                 buffer_size, ishape, oshape,
                                                 x_mean, x_std, y_mean, y_std,
                                                 x_min,  x_max, y_min,  y_max,
                                                 scalelims, shuffle)
-        #self.Xte,  self.Yte  
         self.test_dataset    = U.load_TFdataset(ftest_TFR,  ncores, batch_size,
                                                 buffer_size, ishape, oshape,
                                                 x_mean, x_std, y_mean, y_std,
@@ -678,10 +676,10 @@ class NNModel:
         self.stop_file   = stop_file
 
         if lossfunc is None:
-            self.lossfunc = keras.losses.MeanSquaredError
-            self.lossfunc.__name__ = 'mse'
-        else:
-            self.lossfunc = lossfunc
+            lossfunc = keras.losses.MeanSquaredError
+            lossfunc.__name__ = 'mse'
+        #else:
+        #    self.lossfunc = lossfunc
         self.lengthscale = lengthscale
         self.max_lr      = max_lr
         self.clr_mode    = clr_mode
@@ -699,16 +697,10 @@ class NNModel:
         self.shuffle    = shuffle
 
         ### Build model
-        # Input layer
-        #if shuffle:
-        #    inp = Input(shape=ishape, tensor=self.X)
-        #else:
-        #    inp = Input(shape=ishape)
         inp = Input(shape=ishape)
         x = inp
         # Hidden layers
         n = 0 # Counter for layers with nodes
-        losses = []
         for i in range(len(layers)):
             if layers[i] in ['conv1d', 'conv2d', 'conv3d', 
                              'conv2dtranspose', 'conv3dtranspose']:
@@ -764,23 +756,10 @@ class NNModel:
                         x = Dense(nodes[n], kernel_regularizer=kernel_regularizer)(x)
                         x = activations[n] (x)
                 elif layers[i] == 'concretedropout':
-                    #if type(activations[n]) == str:
-                        #x, loss = ConcreteDropout(Dense(nodes[n], activation=activations[n]), 
-                        #                    weight_regularizer=wd, 
-                        #                    dropout_regularizer=dd)(x)
-                    x, loss = ConcreteDropout(nodes[n], activation=activations[n], 
+                    x, _ = ConcreteDropout(nodes[n], activation=activations[n], 
                                               weight_regularizer=wd, 
                                               dropout_regularizer=dd,
                                               kernel_regularizer=kernel_regularizer)(x)
-                    #else:
-                        #x, loss = ConcreteDropout(Dense(nodes[n]), 
-                        #                    weight_regularizer=wd, 
-                        #                    dropout_regularizer=dd)(x)
-                    #    x, loss = ConcreteDropout(nodes[n], 
-                    #                        weight_regularizer=wd, 
-                    #                        dropout_regularizer=dd)(x)
-                    #    x = activations[n](x)
-                    losses.append(loss)
                 n += 1
             elif layers[i] in ['maxpool1d', 'maxpool2d', 'maxpool3d']:
                 if layers[i-1] == 'dense' or layers[i-1] == 'flatten':
@@ -810,42 +789,25 @@ class NNModel:
             else:
                 raise ValueError("Unknown layer type: " + layers[i])
         # Output layer(s)
-        if 'heteroscedastic' in self.lossfunc.__name__:
-            #mean, loss = ConcreteDropout(Dense(self.D), 
-            #                          weight_regularizer=wd, 
-            #                          dropout_regularizer=dd)(x)
-            mean, loss = ConcreteDropout(self.D, 
+        if 'heteroscedastic' in lossfunc.__name__:
+            mean, _ = ConcreteDropout(self.D, 
                                       weight_regularizer=wd, 
                                       dropout_regularizer=dd,
                                       kernel_regularizer=kernel_regularizer)(x)
-            losses.append(loss)
-            #log_var, loss = ConcreteDropout(Dense(int(self.D * (self.D+1)/2)), 
-            #                          weight_regularizer=wd, 
-            #                          dropout_regularizer=dd)(x)
-            log_var, loss = ConcreteDropout(int(self.D * (self.D+1)/2), 
+            log_var, _ = ConcreteDropout(int(self.D * (self.D+1)/2), 
                                       weight_regularizer=wd, 
                                       dropout_regularizer=dd,
                                       kernel_regularizer=kernel_regularizer)(x)
-            losses.append(loss)
             out = concatenate([mean, log_var])
         else:
             x = Dense(np.prod(oshape), kernel_regularizer=kernel_regularizer)(x)
             out = Reshape(oshape)(x)
 
         self.model = Model(inp, out)
-        for loss in losses:
-            self.model.add_loss(loss)
 
         # Compile model
-        #if shuffle:
-        #    self.model.compile(optimizer=Adam(lr=self.lengthscale, amsgrad=True),
-        #                       loss=self.lossfunc,
-        #                       target_tensors=[self.Y])
-        #else:
-        #    self.model.compile(optimizer=Adam(lr=self.lengthscale, amsgrad=True),
-        #                       loss=self.lossfunc)
         self.model.compile(optimizer=Adam(learning_rate=self.lengthscale, amsgrad=True),
-                           loss=self.lossfunc())
+                           loss=lossfunc())
         print(self.model.summary())
 
 
@@ -878,7 +840,7 @@ class NNModel:
                 #                   target_tensors=[self.Y])
                 #self.weight_file = self.weight_file.replace('.onnx', '.h5')
                 raise Exception('Resuming training for .onnx models is not ' + \
-                                'yet available. Please specify a .h5 file.')
+                                'yet available. Please specify a .keras file.')
             else:
                 self.model.load_weights(self.weight_file)
             try:
@@ -938,7 +900,7 @@ class NNModel:
                                              epochs=epochs,
                                              steps_per_epoch=self.train_batches,
                                              verbose=2,
-                                             validation_data=self.valid_dataset,#(self.Xval, self.Yval),
+                                             validation_data=self.valid_dataset,
                                              validation_steps=self.valid_batches,
                                              validation_freq=1,
                                              callbacks=callbacks)
@@ -978,37 +940,22 @@ class NNModel:
         preddir: string. Path/to/directory where predictions will be saved.
         denorm : bool.   Determines whether to denormalize the predicted values.
         """
-        if self.shuffle:
-            raise ValueError("This model has shuffled TFRecords.\nCreate a " +\
-                        "new NNModel object with shuffle=False and try again.")
+        assert not self.shuffle, "This model has shuffled TFRecords.\nCreate "+\
+                       "a new NNModel object with shuffle=False and try again."
 
-        if dataset == 'train':
-            #X = self.X
-            #Y = self.Y
-            TFRdataset = self.train_dataset.as_numpy_iterator()
-            num_batches = self.train_batches
-        elif dataset == 'valid':
-            #X = self.Xval
-            #Y = self.Yval
-            TFRdataset = self.valid_dataset.as_numpy_iterator()
-            num_batches = self.valid_batches
-        elif dataset == 'test':
-            #X = self.Xte
-            #Y = self.Yte
-            TFRdataset = self.test_dataset.as_numpy_iterator()
-            num_batches = self.test_batches
-        else:
-            raise ValueError("Invalid specification for `dataset` parameter " +\
-                    "of NNModel.Yeval().\nAllowed options: 'train', 'valid'," +\
-                    " or 'test'\nPlease correct this and try again.")
+        assert dataset in ['train', 'valid', 'test'], "Invalid specification "+\
+                            "for `dataset` parameter of NNModel.Yeval().\n" +\
+                            "Allowed options: 'train', 'valid', or 'test'\n" +\
+                            "Please correct this and try again."
+        TFRdataset = getattr(self, dataset+'_dataset').as_numpy_iterator()
+        num_batches = getattr(self, dataset+'_batches')
 
         # Prefix for the savefiles
-        if mode == 'pred' or mode == 'true':
-            fname = ''.join([preddir, dataset, os.sep, mode])
-        else:
-            raise ValueError("Invalid specification for `mode` parameter of " +\
-                             "NNModel.Yeval().\nAllowed options: 'pred' or "  +\
-                             "'true'\nPlease correct this and try again.")
+        assert mode in ['pred', 'true'], "Invalid specification for `mode` "+\
+                                         "parameter of NNModel.Yeval().\n"+\
+                                         "Allowed options: 'pred' or 'true'\n"+\
+                                         "Please correct this and try again."
+        fname = ''.join([preddir, dataset, os.sep, mode])
 
         if denorm:
             fname = ''.join([fname, '-denorm_'])
@@ -1103,7 +1050,7 @@ def objective(trial, ftrain_TFR, fvalid_TFR, ftest_TFR,
     lay_params, _ = U.prepare_layers(selected_layers, [None]*nlayers, nnodes)
     try:
         model = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                        ishape, oshape, olog,
+                        ishape, oshape, ilog, olog,
                         x_mean, x_std, y_mean, y_std,
                         x_min,  x_max, y_min,  y_max, scalelims,
                         ncores, buffer_size, batch_size, nbatches,
@@ -1123,9 +1070,9 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
            trainflag, validflag, testflag,
            normalize, fxmean, fxstd, fymean, fystd,
            scale, fxmin, fxmax, fymin, fymax, scalelims,
-           fsize, rmse_file, r2_file, statsaxes,
+           rmse_file, r2_file, statsaxes,
            ishape, oshape, ilog, olog,
-           TFRfile, batch_size, ncores, buffer_size,
+           fTFR, batch_size, set_nbatches, ncores, buffer_size,
            optimize, optfunc, optngpus, opttime, optnlays, optlayer, optnnode,
            optactiv, optactrng, optminlr, optmaxlr, optmaxconvnode,
            gridsearch, architectures,
@@ -1165,12 +1112,16 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     statsaxes  : string. Determines which axes to compute stats over.
                          Options: all - all axes except last axis
                                 batch - only 0th axis
-    ishape     : tuple, ints. Dimensionality of the input  data.
-    oshape     : tuple, ints. Dimensionality of the output data.
+    ishape     : tuple, ints. Dimensionality of the input  data, without the batch size.
+    oshape     : tuple, ints. Dimensionality of the output data, without the batch size.
     ilog       : bool.   Determines whether to take the log10 of intput  data.
     olog       : bool.   Determines whether to take the log10 of output data.
-    TFRfile    : string. Prefix for TFRecords files.
+    fTFR       : list of list of strings.  Contains the TFRecords file paths.
+                         Element 0: list of training TFRecords files
+                         Element 1: list of validation TFRecords files
+                         Element 2: list of test TFRecords files
     batch_size : int.    Size of batches for training/validating/testing.
+    set_nbatches: tuple, ints.  Number of batches in the training/validation/test sets.
     ncores     : int.    Number of cores to use to load data cases.
     buffer_size: int.    Number of data cases to pre-load in memory.
     optimize   : int.    Determines whether to use hyperparameter optimization.
@@ -1224,30 +1175,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                          desired unit.  Default: 1.0
     verb       : int.    Controls how much output is printed to terminal.
     """
-    # Get file names, calculate number of cases per file
-    print('Loading files & calculating total number of batches...', flush=True)
-
-    try:
-        datsize   = np.load(fsize)
-        num_train = datsize[0]
-        num_valid = datsize[1]
-        num_test  = datsize[2]
-    except:
-        num_train = U.data_set_size(glob.glob(datadir + 'train' + os.sep + '*.npz'), ishape, oshape, ncores)
-        num_valid = U.data_set_size(glob.glob(datadir + 'valid' + os.sep + '*.npz'), ishape, oshape, ncores)
-        num_test  = U.data_set_size(glob.glob(datadir + 'test'  + os.sep + '*.npz'), ishape, oshape, ncores)
-        np.save(fsize, np.array([num_train, num_valid, num_test], dtype=int))
-
-    print("Data set sizes")
-    print("Training   data:", num_train)
-    print("Validation data:", num_valid)
-    print("Testing    data:", num_test)
-    print("Total          :", num_train + num_valid + num_test)
-
-    train_batches = num_train // batch_size
-    valid_batches = num_valid // batch_size
-    test_batches  = num_test  // batch_size
-
+    train_batches, valid_batches, test_batches = set_nbatches
     # Update `clr_steps`
     if clr_steps == "range test":
         clr_steps = train_batches * epochs
@@ -1256,31 +1184,71 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         clr_steps = train_batches * int(clr_steps)
         rng_test  = False
 
-    # Get mean/stdev for normalizing
-    if normalize:
-        print('\nNormalizing the data...', flush=True)
+    # Get mean/stdev for normalizing, min/max for scaling
+    if normalize or scale:
+        if normalize:
+            print('\nNormalizing the data...', flush=True)
+        else:
+            print('\nScaling the data...', flush=True)
+        
         try:
             x_mean = np.load(fxmean)
             x_std  = np.load(fxstd)
             y_mean = np.load(fymean)
             y_std  = np.load(fystd)
         except:
-            print("Calculating the mean and standard deviation of the data " +\
-                  "using Welford's method.", flush=True)
+            print("Determining the minimum, maximum, mean, and standard " +\
+                  "deviation based on Welford's method.", flush=True)
             # Compute stats
             x_mean, x_std, x_min, x_max, \
             y_mean, y_std, y_min, y_max  = S.save_stats_files(glob.glob(datadir + 'train' + os.sep + '*.npz'),
                                                               ilog, olog, ishape, oshape,
                                                               fxmean, fxstd, fxmin,  fxmax,
                                                               fymean, fystd, fymin,  fymax, statsaxes)
-        if verb:
-            print("mean :", x_mean, y_mean)
-            print("stdev:", x_std,  y_std)
+        if normalize:
+            # Sanity check
+            if np.any(x_std == 0):
+                ibad = np.where(x_std == 0)
+                raise ValueError("A standard deviation of 0 was found at the "+\
+                                 "following indices for the input data:\n"+\
+                                 str(ibad))
+            elif np.any(y_std == 0):
+                ibad = np.where(y_std == 0)
+                raise ValueError("A standard deviation of 0 was found at the "+\
+                                 "following indices for the output data:\n"+\
+                                 str(ibad))
+            if verb:
+                print("mean :", x_mean, y_mean)
+                print("stdev:", x_std,  y_std)
+            if scale:
+                x_min = U.normalize(x_min, x_mean, x_std)
+                x_max = U.normalize(x_max, x_mean, x_std)
+                y_min = U.normalize(y_min, y_mean, y_std)
+                y_max = U.normalize(y_max, y_mean, y_std)
+        else:
+            if np.any(x_min == x_max):
+                ibad = np.where(x_min == x_max)
+                raise ValueError("The minimum and maximum are equal at the " +\
+                                 "following indices for the input data:\n"+\
+                                 str(ibad))
+            elif np.any(y_min == y_max):
+                ibad = np.where(y_min == y_max)
+                raise ValueError("The minimum and maximum are equal at the " +\
+                                 "following indices for the output data:\n"+\
+                                 str(ibad))
+            if verb:
+                print("min:", x_min, y_min)
+                print("max:", x_max, y_max)
     else:
         x_mean = 0.
         x_std  = 1.
         y_mean = 0.
         y_std  = 1.
+        x_min     =  0.
+        x_max     =  1.
+        y_min     =  0.
+        y_max     =  1.
+        scalelims = [0., 1.]
 
     if olog:
         # To later properly calculate RMSE & R2 for log-scaled output
@@ -1293,67 +1261,8 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     else:
         y_mean_delog = y_mean
 
-    # Get min/max values for scaling
-    if scale:
-        print('\nScaling the data...', flush=True)
-        try:
-            x_min = np.load(fxmin)
-            x_max = np.load(fxmax)
-            y_min = np.load(fymin)
-            y_max = np.load(fymax)
-        except:
-            x_mean, x_std, x_min, x_max, \
-            y_mean, y_std, y_min, y_max  = S.save_stats_files(glob.glob(datadir + 'train' + os.sep + '*.npz'),
-                                                              ilog, olog, ishape, oshape,
-                                                              fxmean, fxstd, fxmin,  fxmax,
-                                                              fymean, fystd, fymin,  fymax, statsaxes)
-        if verb:
-            print("min:", x_min, y_min)
-            print("max:", x_max, y_max)
-
-        # Normalize min/max values
-        if normalize:
-            x_min = U.normalize(x_min, x_mean, x_std)
-            x_max = U.normalize(x_max, x_mean, x_std)
-            y_min = U.normalize(y_min, y_mean, y_std)
-            y_max = U.normalize(y_max, y_mean, y_std)
-    else:
-        x_min     =  0.
-        x_max     =  1.
-        y_min     =  0.
-        y_max     =  1.
-        scalelims = [0., 1.]
-
     # Get TFRecord file names
-    print('\nLoading TFRecords file names...', flush=True)
-    TFRpath = os.path.join(inputdir, 'TFRecords', TFRfile)
-    ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
-    fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
-    ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
-
-    if len(ftrain_TFR) == 0 or len(fvalid_TFR) == 0 or len(ftest_TFR) == 0:
-        # Doesn't exist -- make them
-        print("\nSome TFRecords files do not exist yet.", flush=True)
-        if len(ftrain_TFR) == 0:
-            print("Making TFRecords for training data...", flush=True)
-            U.make_TFRecord(TFRpath + 'train.tfrecords',
-                            glob.glob(datadir + 'train' + os.sep + '*.npz'),
-                            ilog, olog, batch_size, train_batches)
-        if len(fvalid_TFR) == 0:
-            print("\nMaking TFRecords for validation data...", flush=True)
-            U.make_TFRecord(TFRpath + 'valid.tfrecords',
-                            glob.glob(datadir + 'valid' + os.sep + '*.npz'),
-                            ilog, olog, batch_size, valid_batches)
-        if len(ftest_TFR) == 0:
-            print("\nMaking TFRecords for test data...", flush=True)
-            U.make_TFRecord(TFRpath + 'test.tfrecords',
-                            glob.glob(datadir + 'test'  + os.sep + '*.npz'),
-                            ilog, olog, batch_size, test_batches)
-        print("\nTFRecords creation complete.", flush=True)
-        # Get TFR file names for real this time
-        ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
-        fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
-        ftest_TFR  = glob.glob(TFRpath +  'test*.tfrecords')
+    ftrain_TFR, fvalid_TFR, ftest_TFR = fTFR
 
     # Load the xvals
     if fxvals is not None:
@@ -1374,7 +1283,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             wfile   = ''.join([archdir, wsplit[0], '_', arch, '.', wsplit[1]])
             U.make_dir(archdir)
             nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                         ishape, oshape, olog,
+                         ishape, oshape, ilog, olog,
                          x_mean, x_std, y_mean, y_std,
                          x_min,  x_max, y_min,  y_max, scalelims,
                          ncores, buffer_size, batch_size,
@@ -1418,7 +1327,6 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             print("  Maximum learning rate:", optmaxlr)
         if opttime is not None:
             print("  Time limit:", opttime/60./60., "hrs")
-        #with dask.distributed.Client() as client:
         if optngpus>1:
             client = dask.distributed.Client()
             futures = []
@@ -1470,7 +1378,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     if trainflag:
         print('\nBeginning model training.\n', flush=True)
         nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                     ishape, oshape, olog,
+                     ishape, oshape, ilog, olog,
                      x_mean, x_std, y_mean, y_std,
                      x_min,  x_max, y_min,  y_max, scalelims,
                      ncores, buffer_size, batch_size,
@@ -1483,6 +1391,12 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         nn.train(epochs, patience)
         # Plot the loss
         P.loss(nn, plotdir)
+    
+    if not os.path.exists(weight_file):
+        # No model trained this time or previously
+        if verb:
+            print("No model file found.  Exiting.", flush=True)
+        return
 
     # Call new model with shuffle=False
     # lossfunc is set to None because we will not be training it, and
@@ -1491,7 +1405,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         if 'heteroscedastic' not in lossfunc.__name__:
             lossfunc = None
     nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                 ishape, oshape, olog,
+                 ishape, oshape, ilog, olog,
                  x_mean, x_std, y_mean, y_std,
                  x_min,  x_max, y_min,  y_max, scalelims,
                  ncores, buffer_size, batch_size,
@@ -1501,17 +1415,16 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                  clr_mode, clr_steps,
                  weight_file, stop_file='./STOP',
                  train_flag=False, shuffle=False, resume=False)
-    if '.h5' in weight_file or '.hdf5' in weight_file or '.keras' in weight_file:
-        nn.model.load_weights(weight_file) # Load the model
+    if '.keras' in weight_file:
+        nn.model.load_weights(weight_file) # Load the trained model
         # Save in ONNX format
         try:
-            onnx_model = keras2onnx.convert_keras(nn.model)
-            onnx.save_model(onnx_model, nn.weight_file.rsplit('.', 1)[0] + '.onnx')
+            _ = tf2onnx.convert.from_keras(nn.model, input_signature=np.zeros((batch_size,) + ishape, dtype=float), output_path=weight_file.replace('.keras', '.onnx'))
         except Exception as e:
             print("Unable to convert the Keras model to ONNX:")
             print(e)
-    else:
-        nn.model = onnx_to_keras(onnx.load_model(weight_file), ['input_1'])
+    #else:
+    #    nn.model = onnx_to_keras(onnx.load_model(weight_file), ['input_1'])
 
     # Validate model
     if (validflag or trainflag) and not rng_test:
