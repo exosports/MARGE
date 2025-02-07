@@ -1,3 +1,0 @@
-keras2onnx==1.7.0
-onnx==1.7.0
-onnx2keras==0.0.22
