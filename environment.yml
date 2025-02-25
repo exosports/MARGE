@@ -1,0 +1,16 @@
+name: marge
+channels:
+  - conda-forge
+dependencies:
+  - cudnn=9.3.0.75
+  - dask=2024.12.0
+  - h5py=3.12.1
+  - keras=3.7.0
+  - matplotlib=3.10.0
+  - numpy=1.26.4
+  - optuna=4.1.0
+  - optuna-integration=4.1.0
+  - scikit-learn=1.6.0
+  - scipy=1.14.1
+  - tensorflow-gpu=2.17.0
+  - tf2onnx=1.16.1
