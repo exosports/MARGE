@@ -1196,6 +1196,10 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             x_std  = np.load(fxstd)
             y_mean = np.load(fymean)
             y_std  = np.load(fystd)
+            x_min  = np.load(fxmin)
+            x_max  = np.load(fxmax)
+            y_min  = np.load(fymin)
+            y_max  = np.load(fymax)
         except:
             print("Determining the minimum, maximum, mean, and standard " +\
                   "deviation based on Welford's method.", flush=True)
