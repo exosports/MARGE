@@ -572,7 +572,7 @@ class NNModel:
     """
 
     def __init__(self, ftrain_TFR, fvalid_TFR, ftest_TFR,
-                 ishape, oshape, ilog, olog,
+                 ishape, oshape, olog,
                  x_mean, x_std, y_mean, y_std,
                  x_min,  x_max, y_min,  y_max, scalelims,
                  ncores, buffer_size, batch_size, nbatches,
@@ -591,7 +591,6 @@ class NNModel:
         ftest_TFR  : list, strings. TFRecords for the test       data.
         ishape     : tuple, ints. Shape of the input  data.
         oshape     : tuple, ints. Shape of the output data.
-        ilog       : bool or array of bool.  Determines if the input  values are log10-scaled.
         olog       : bool or array of bool.  Determines if the target values are log10-scaled.
         x_mean     : array. Mean  values of the input  data.
         x_std      : array. Stdev values of the input  data.
@@ -1050,7 +1049,7 @@ def objective(trial, ftrain_TFR, fvalid_TFR, ftest_TFR,
     lay_params, _ = U.prepare_layers(selected_layers, [None]*nlayers, nnodes)
     try:
         model = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                        ishape, oshape, ilog, olog,
+                        ishape, oshape, olog,
                         x_mean, x_std, y_mean, y_std,
                         x_min,  x_max, y_min,  y_max, scalelims,
                         ncores, buffer_size, batch_size, nbatches,
@@ -1287,7 +1286,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             wfile   = ''.join([archdir, wsplit[0], '_', arch, '.', wsplit[1]])
             U.make_dir(archdir)
             nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                         ishape, oshape, ilog, olog,
+                         ishape, oshape, olog,
                          x_mean, x_std, y_mean, y_std,
                          x_min,  x_max, y_min,  y_max, scalelims,
                          ncores, buffer_size, batch_size,
@@ -1382,7 +1381,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     if trainflag:
         print('\nBeginning model training.\n', flush=True)
         nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                     ishape, oshape, ilog, olog,
+                     ishape, oshape, olog,
                      x_mean, x_std, y_mean, y_std,
                      x_min,  x_max, y_min,  y_max, scalelims,
                      ncores, buffer_size, batch_size,
@@ -1409,7 +1408,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
         if 'heteroscedastic' not in lossfunc.__name__:
             lossfunc = None
     nn = NNModel(ftrain_TFR, fvalid_TFR, ftest_TFR,
-                 ishape, oshape, ilog, olog,
+                 ishape, oshape, olog,
                  x_mean, x_std, y_mean, y_std,
                  x_min,  x_max, y_min,  y_max, scalelims,
                  ncores, buffer_size, batch_size,
