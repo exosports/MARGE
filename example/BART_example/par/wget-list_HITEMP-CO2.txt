@@ -1,0 +1,12 @@
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_00000-00500_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_00500-00625_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_00625-00750_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_00750-01000_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_01000-01500_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_01500-02000_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_02000-02125_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_02125-02250_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_02250-02500_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_02500-03000_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_03000-03250_HITEMP2010.zip
+https://hitran.org/hitemp/data/HITEMP-2010/CO2_line_list/02_03250-03500_HITEMP2010.zip
