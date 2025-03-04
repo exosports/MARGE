@@ -1187,7 +1187,7 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
     if normalize or scale:
         if normalize:
             print('\nNormalizing the data...', flush=True)
-        else:
+        if scale:
             print('\nScaling the data...', flush=True)
         
         try:
@@ -1229,6 +1229,11 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
                 y_min = U.normalize(y_min, y_mean, y_std)
                 y_max = U.normalize(y_max, y_mean, y_std)
         else:
+            x_mean = 0.
+            x_std  = 1.
+            y_mean = 0.
+            y_std  = 1.
+        if scale:
             if np.any(x_min == x_max):
                 ibad = np.where(x_min == x_max)
                 raise ValueError("The minimum and maximum are equal at the " +\
@@ -1242,6 +1247,12 @@ def driver(inputdir, outputdir, datadir, plotdir, preddir,
             if verb:
                 print("min:", x_min, y_min)
                 print("max:", x_max, y_max)
+        else:
+            x_min     =  0.
+            x_max     =  1.
+            y_min     =  0.
+            y_max     =  1.
+            scalelims = [0., 1.]
     else:
         x_mean = 0.
         x_std  = 1.
