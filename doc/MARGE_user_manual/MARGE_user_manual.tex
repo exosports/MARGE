@@ -53,7 +53,7 @@ Dr.~Joseph \textsc{Harrington}
 
 \begin{itemize}
 \item \href{https://github.com/mdhimes/}{Michael D. Himes}, 
-                 Morgan State University/NASA Goddard Space Flight Center (michael.d.himes@nasa.gov)
+                 Morgan State University/NASA GSFC (michael.d.himes@nasa.gov)
 \item Joseph Harrington, University of Central Florida
 \item Adam Cobb, University of Oxford
 \item David C. Wright, University of Central Florida
@@ -104,8 +104,8 @@ For details, see \\
  .3 quick\_example.
  .2 lib. 
  .3 datagen.
- .3 loss.
  .4 BART.
+ .3 loss.
  .2 modules. 
  .3 BART. 
 }
@@ -451,7 +451,7 @@ configuration file (see Section \ref{sec:BARTconfig}).
 
 \noindent The available options for a MARGE configuration file are listed below.
 
-\noindent \underline(General Parameters)
+\noindent \underline{General Parameters}
 \begin{itemize}
 	\item verb   : int. Determines how much output is logged.  
 	                          0: Only errors/critical information.  
@@ -462,7 +462,7 @@ configuration file (see Section \ref{sec:BARTconfig}).
 	                          5: Maximum detail.
 \end{itemize}
 
-\noindent \underline(Directories)
+\noindent \underline{Directories}
 \begin{itemize}
 \item inputdir   : str.  Directory containing MARGE inputs.
 \item outputdir  : str.  Directory containing MARGE outputs.
@@ -650,7 +650,7 @@ below.  For details on the specific implementation of each layer, refer to
 \href{https://keras.io/api/layers/}{the relevant Keras documentation}.
 
 \begin{center}
-	\begin{tabular}{| l | l | l | l | l |}
+	\begin{tabular}{| l | p{3cm} | l | l | p{2cm} |}
 		\hline
 		Layer & MARGE configuration file option & Has nodes? & Layer parameter & Default layer parameter \\
 		\hline\hline
@@ -964,7 +964,8 @@ on those data.  Note that the data statistics files saved in the inputs director
 were computed on the log-transformed data.  If both scaling and normalization 
 are applied, MARGE will first apply normalization and then apply scaling; users 
 must normalize the minima and maxima to achieve the proper transformation 
-in their code. \newline
+in their code.  Note that this is equivalent to simply scaling, so it is 
+recommended that users do not use both normalization and scaling.  \newline
 
 \noindent Users will also need to post-process the predictions in the same way 
 that MARGE does.  This follows the opposite order as the pre-processing: first 
@@ -1015,9 +1016,9 @@ implement transformation functions to apply the necessary transformations as
 described in Section \ref{sec:generalusemodel}. \newline
 
 \noindent If a user finds a useful library for a language of their choice, please 
-consider informing the author so it can be mentioned here.  Below are two 
-such libraries that the author is aware of, but there are surely other, possibly 
-more feature-rich, libraries out there. \newline
+consider informing the author or submitting a pull request so it can be 
+mentioned here.  Below are two such libraries that the author is aware of, 
+but there are surely other, possibly more feature-rich, libraries out there. \newline
 
 \noindent For C-based codes, users can consider the 
 \href{https://github.com/alrevuelta/cONNXr}{cONNXr library}.  Note that there 
@@ -1129,21 +1130,29 @@ Please cite this paper if you found this package useful for your research:
 \href{https://iopscience.iop.org/article/10.3847/PSJ/abe3fd/meta}{Himes et al. 2022, PSJ, 3, 91}
 
 \begin{verbatim}
-@ARTICLE{2022PSJ.....3...91H,
-       author = {{Himes}, Michael D. and {Harrington}, Joseph and {Cobb}, Adam D. and {G{\"u}ne{\c{s}} Baydin}, At{\i}l{\i}m and {Soboczenski}, Frank and {O'Beirne}, Molly D. and {Zorzan}, Simone and {Wright}, David C. and {Scheffer}, Zacchaeus and {Domagal-Goldman}, Shawn D. and {Arney}, Giada N.},
-        title = "{Accurate Machine-learning Atmospheric Retrieval via a Neural-network Surrogate Model for Radiative Transfer}",
-      journal = {\psj},
-     keywords = {Exoplanet atmospheres, Bayesian statistics, Posterior distribution, Convolutional neural networks, Neural networks, 487, 1900, 1926, 1938, 1933},
-         year = 2022,
-        month = apr,
-       volume = {3},
-       number = {4},
-          eid = {91},
-        pages = {91},
-          doi = {10.3847/PSJ/abe3fd},
-       adsurl = {https://ui.adsabs.harvard.edu/abs/2022PSJ.....3...91H},
-      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
-}
+	@ARTICLE{2022PSJ.....3...91H,
+		author = {{Himes}, Michael D. and {Harrington}, Joseph and 
+			{Cobb}, Adam D. and {G{\"u}ne{\c{s}} Baydin}, At{\i}l{\i}m and 
+			{Soboczenski}, Frank and {O'Beirne}, Molly D. and 
+			{Zorzan}, Simone and {Wright}, David C. and 
+			{Scheffer}, Zacchaeus and {Domagal-Goldman}, Shawn D. and 
+			{Arney}, Giada N.},
+		title = "{Accurate Machine-learning Atmospheric Retrieval via a Neural-network 
+			Surrogate Model for Radiative Transfer}",
+		journal = {\psj},
+		keywords = {Exoplanet atmospheres, Bayesian statistics, Posterior distribution, 
+			Convolutional neural networks, Neural networks, 
+			487, 1900, 1926, 1938, 1933},
+		year = 2022,
+		month = apr,
+		volume = {3},
+		number = {4},
+		eid = {91},
+		pages = {91},
+		doi = {10.3847/PSJ/abe3fd},
+		adsurl = {https://ui.adsabs.harvard.edu/abs/2022PSJ.....3...91H},
+		adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+	}
 \end{verbatim}
 
 \noindent Thanks!
