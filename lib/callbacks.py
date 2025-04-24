@@ -19,12 +19,19 @@ other callbacks to enable the resumption of training.
 
 import sys, os
 import time
+import logging
+logging.setLoggerClass(logging.Logger)
 import signal
 import numpy as np
 from tensorflow.keras.callbacks import *
 import tensorflow.keras.backend as K
 import pickle
 import glob
+
+import custom_logger as CL
+logging.setLoggerClass(CL.MARGE_Logger)
+
+logger = logging.getLogger('MARGE.'+__name__)
 
 
 class CyclicLR(Callback):
@@ -203,13 +210,11 @@ class SignalStopping(Callback):
 		self.stop_file_delta = stop_file_delta
 		def signal_handler(sig, frame):
 			if self.signal_received and self.doubleSignalExits:
-				if self.verbose > 0:
-					print('\nReceived signal to stop ' + str(sig) + \
-                          ' twice. Exiting..')
+				logger.warning('\nReceived signal to stop ' + str(sig) + \
+                            ' twice. Exiting..')
 				exit(sig)
 			self.signal_received = True
-			if self.verbose > 0:
-				print('\nReceived signal to stop: ' + str(sig))
+			logger.warning('\nReceived signal to stop: ' + str(sig))
 		signal.signal(signal.SIGINT, signal_handler)
 		self.stopped_epoch = 0
 
@@ -227,8 +232,8 @@ class SignalStopping(Callback):
 			self.model.stop_training = True
 
 	def on_train_end(self, logs={}):
-		if self.stopped_epoch > 0 and self.verbose > 0:
-			print('Epoch %05d: stopping due to signal' % (self.stopped_epoch))
+		if self.stopped_epoch > 0:
+			logger.warning('Epoch %05d: stopping due to signal' % (self.stopped_epoch))
 
 
 class ModelCheckpointEnhanced(ModelCheckpoint):

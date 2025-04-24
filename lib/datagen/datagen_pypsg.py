@@ -20,7 +20,7 @@ def generate_data(cfile, data_dir=None):
     """
     print('SmithEtal is not configured to generate data.')
     print('Set datagen=False and try again.')
-    sys.exit()
+    sys.exit(1)
 
 
 def process_data(cfile, data_dir, preserve=True):

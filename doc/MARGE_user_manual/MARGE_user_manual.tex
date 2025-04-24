@@ -52,18 +52,20 @@ Dr.~Joseph \textsc{Harrington}
 \label{sec:team}
 
 \begin{itemize}
-\item \href{https://github.com/mdhimes/}{Michael Himes}%
-  \footnote{https://github.com/mdhimes/}, NASA 
-      Postdoctoral Program (michael.d.himes@nasa.gov)
+\item \href{https://github.com/mdhimes/}{Michael D. Himes}, 
+                 Morgan State University/NASA Goddard Space Flight Center (michael.d.himes@nasa.gov)
 \item Joseph Harrington, University of Central Florida
 \item Adam Cobb, University of Oxford
 \item David C. Wright, University of Central Florida
 \item Zacchaeus Scheffer, University of Central Florida
 \end{itemize}
 
-\noindent We would also like to acknowledge and thank James Mang and 
-Nick Susemiehl for testing the software and informing the User Manual 
-instructions related to Windows and Mac.
+\noindent We would also like to acknowledge and thank 
+\begin{itemize}
+	\item James Mang and Nick Susemiehl for testing the software and informing 
+        the User Manual instructions related to Windows and Mac, and
+    \item Sergey Korkin for valuable feedback on the software and User Manual.
+\end{itemize}
 
 \section{Introduction}
 \label{sec:theory}
@@ -98,8 +100,11 @@ For details, see \\
  .1 MARGE. 
  .2 doc.
  .2 example.
+ .3 BART\_example.
+ .3 quick\_example.
  .2 lib. 
  .3 datagen.
+ .3 loss.
  .4 BART.
  .2 modules. 
  .3 BART. 
@@ -133,19 +138,21 @@ versions of packages:
 \end{itemize}
 
 \noindent If using BART for data generation, MARGE requires a working MPI 
-distribution.  Additionally, if using ONNX models, the ONNX runtime and 
-associated packages to convert from/to ONNX are required.  The last verified 
-versions are given below.  Installation instructions are not provided for ONNX, 
-but MPI installation is included in the BART setup instructions below.
+distribution.  The last verified versions are given below.  MPI installation is 
+included in the BART setup instructions below.
 
 \begin{itemize}
 	\item MPICH 3.3.2
 	\item mpi4py 3.0.3
-	\item ONNX 1.6.0
-	\item keras2onnx 1.6.1
-	\item onnx2keras 0.0.22
 \end{itemize}
 
+Additionally, if using ONNX models, the ONNX runtime and 
+associated packages to convert from/to ONNX are required.  
+Installation instructions are not provided for ONNX, as the 
+package to convert ONNX to Keras models is no longer 
+maintained.  If the `tf2onnx' package is installed, it is used 
+to convert the trained Keras model into ONNX once training 
+completes.
 
 
 \subsection{Install and Compile}
@@ -210,29 +217,33 @@ up the environment and activating it as detailed above, enter
 \begin{verbatim}
 conda install nomkl
 \end{verbatim}
-\noindent into the terminal.  This will solve the problem.
+\noindent into the terminal.  This will solve the problem.  
+If you still encounter problems/warnings, contact the lead 
+author so that it can be addressed.
 
 
 \subsubsection{Windows}
 
 \noindent We offer support for Windows through two methods.  For users that 
 prefer the Windows Subsytem for Linux, simply follow the Unix instructions 
-above.  For users that prefer to work purely in Windows, we advise using 
-Anaconda's terminal-like prompt.\newline
+above.  For users that prefer to work purely in Windows, we provide the following 
+rough guidelines, but be aware that they have not been tested in quite some time 
+and so may not be accurate anymore.\newline
 
-\noindent For a pure-Windows installation, some minor adjustments are required.
-These instructions assume the user is working within the Anaconda prompt.  
-First, edit the environment.yml file and remove the entry for mpich and mpi4py. 
-Users must install the Microsoft MPI (MS-MPI) package.  Microsoft's Github repo 
-for MS-MPI includes a link to the most recent version of the package: download 
+\noindent For a pure-Windows installation, some minor adjustments to the 
+Unix instructions are required.  
+If using BART, users must install the Microsoft MPI (MS-MPI) package, rather 
+than mpich and mpi4py.
+Microsoft's Github repo 
+for MS-MPI includes a link to the most recent version of the package; download 
 it and follow the installation instructions.  Additionally, it requires the 
-Windows 10 SDK.  Two directories must be added to the path; their default 
+Windows SDK.  Two directories must be added to the path; their default 
 locations are C:{\textbackslash}Program Files{\textbackslash}Microsoft MPI{\textbackslash}Bin and 
 C:{\textbackslash}Program Files (x86){\textbackslash}Microsoft SDKs{\textbackslash}MPI. \newline
 
 \noindent After completing the above, users may follow the steps described in the Unix 
 section.  After building the conda environment from the modified environment.yml
-file and activating it, users must enter
+file and activating it, users that wish to utilize BART must enter
 \begin{verbatim}
 conda install -c intel mpi4py
 \end{verbatim}
@@ -278,7 +289,7 @@ the learning rate policy:
 \end{verbatim}
 \noindent Look at the history\_clr\_loss.png plot in the `outputs\_rangetest/plots' 
 directory and determine the minimum and maximum learning rates as described in 
-Section \ref{sec:clr}.  $10^{-3} -- 10^{-1}$ should be a good enough range to use. 
+Section \ref{sec:clr}.  $10^{-3} - 10^{-1}$ should be a good enough range to use. 
 For completeness, it would be best to run the optimization for a few different 
 (reasonable) learning rate ranges, to ensure that the optimal model architecture 
 is not dependent on the selected range. \newline
@@ -387,8 +398,8 @@ the terminal as described in Section \ref{sec:example}.
 In order to use MARGE, users must ensure their data has been formatted into 
 MARGE's desired format.\newline
 
-\noindent MARGE handles N-dimensional data.  The data must be structured as 
-follows:
+\noindent MARGE handles N-dimensional data.  The data set must be 
+structured as follows:
 
 \noindent\framebox{\begin{minipage}[t]{0.97\columnwidth}%
 \dirtree{%
@@ -406,7 +417,11 @@ the 3 subdirectories must be named exactly as shown (test, train,
 valid).  These subdirectories will hold the data files. Users may have any 
 number of data files within the subdirectories (e.g., test could have a single 
 file with all of the test cases, while train has 100 files with the training 
-cases). \newline
+cases). It is recommended that users try to balance the number of total files 
+and the size of each file, but this is not strictly required.  For example, some 
+systems can have issues if more than 1000 files are in a directory, and 
+systems that have limited RAM may see a performance hit or even crash if the 
+data files are too large.  \newline
 
 \noindent Each data file must be a Numpy binary zipped archive (.NPZ) file.  
 Each file must contain `x' and `y' keys, which contain the inputs and outputs, 
@@ -421,7 +436,9 @@ to explicitly specify that.
 process the data.  For users that wish to utilize this, look at the example 
 functions in MARGE/lib/datagen/, and note how they are included into the 
 example configuration file.  Users that prefer to manually split their 
-data set should set processdat = False in the configuration file.
+data set should set processdat = False in the configuration file.  Generally, 
+developing code to utilize MARGE's `processdat' feature will only pay dividends 
+if the user plans to make use of it multiple times.
 
 
 \subsection{MARGE Configuration File}
@@ -429,21 +446,33 @@ data set should set processdat = False in the configuration file.
 The MARGE configuration file is the main file that sets the arguments for a 
 MARGE run. The arguments follow the format {\ttb argument = value}, where 
 {\ttb argument} is any of the possible arguments described below. Note that, 
-if generating data via BART, the user must create a BART configuration file 
-(see Section \ref{sec:BARTconfig}).
+if generating data via BART, the user must create an associated BART 
+configuration file (see Section \ref{sec:BARTconfig}).
 
 \noindent The available options for a MARGE configuration file are listed below.
+
+\noindent \underline(General Parameters)
+\begin{itemize}
+	\item verb   : int. Determines how much output is logged.  
+	                          0: Only errors/critical information.  
+	                          1: Like above, but also warnings.  
+	                          2: Like above, but also important details.  
+	                          3: Like above, but a little bit more detail.  
+	                          4: Like above, but also the defaults assumed if a parameter is not specified.  
+	                          5: Maximum detail.
+\end{itemize}
 
 \noindent \underline(Directories)
 \begin{itemize}
 \item inputdir   : str.  Directory containing MARGE inputs.
 \item outputdir  : str.  Directory containing MARGE outputs.
 \item plotdir    : str.  Directory to save plots. 
-                         If relative path, subdirectory within `outputdir`.
+                         If relative path, it is assumed to be relative to `outputdir`,
+                         e.g., if plotdir = plots, then the directory will be `outputdir`/plots.
 \item datadir    : str.  Directory to store generated data. 
-                         If relative path, subdirectory within `outputdir`.
+                         If relative path, it is assumed to be relative to `outputdir`.
 \item preddir    : str.  Directory to store validation and test set predictions and true values. 
-                         If relative path, subdirectory within `outputdir`.
+                         If relative path, it is assumed to be relative to `outputdir`.
 \end{itemize}
 
 \noindent \underline{Datagen Parameters}
@@ -461,7 +490,9 @@ if generating data via BART, the user must create a BART configuration file
                          Can be absolute path, or relative path to `inputdir`.
 \item processdat : bool. Determines whether to process the generated data.
 \item preservedat: bool. Determines whether to preserve the unprocessed data after 
-                   completing data processing.
+                   completing data processing.  \textbf{This only has an effect if processdat = True 
+                   and the `datagenfile` has coded this behavior}; the BART datagen file has 
+                   this feature, but datagen\_pypsg.py does not.
                    Note: if False, it will PERMANENTLY DELETE the original, 
                          unprocessed data!
 \end{itemize}
@@ -469,15 +500,18 @@ if generating data via BART, the user must create a BART configuration file
 
 \noindent \underline{Neural Network (NN) Parameters}
 \begin{itemize}
-\item nnmodel    : bool. Determines whether to use an NN model.
+\item nnmodel   : bool. Determines whether to use an NN model.
+\item use\_cpu  : bool. Determines whether to use the CPU for NN calculations.  
+                                    Note: This will be VERY slow when training for most real applications.  
 \item resume     : bool. Determines whether to resume training a previously-trained 
                    model.
-\item seed       : int.  Random seed.
+\item seed       : int.  Random seed.  Note: currently not used within the code.
 \item trainflag  : bool. Determines whether to train    an NN model.
 \item validflag  : bool. Determines whether to validate an NN model.
 \item testflag   : bool. Determines whether to test     an NN model.
 
 \item TFR\_file  : str.  Prefix for the TFRecords files to be created.
+                                 Has no impact other than naming the files.
 \item buffer     : int.  Number of batches to pre-load into memory.
 \item ncores     : int.  Number of CPU cores to use to load the data in parallel.
 
@@ -487,8 +521,7 @@ if generating data via BART, the user must create a BART configuration file
 \item scalelims  : floats. The min, max of the range of the scaled data.
                      It is recommended to use -1, 1.
 
-\item weight\_file: str.  File containing NN model weights.
-                          NOTE: MUST end in .h5
+\item weight\_file: str.  File containing NN model weights.  MUST end in .keras.
 \item ishape  : int.  Dimensionality of the input to the NN.  Separate each 
                       dimension by a comma.  Example: 6,41,7
 \item oshape : int.  Dimensionality of the output of the NN, specified as above.
@@ -501,23 +534,15 @@ if generating data via BART, the user must create a BART configuration file
 
 \item gridsearch : bool. Determines whether to perform a gridsearch over 
                          architectures.
-\item architectures: strings. Name/identifier for a given model architecture.  
-                         Names must not include spaces!
-                         For multiple architectures, separate with a space or 
-                         indented newlines.
 \item nodes : ints. Number of nodes per layer that has nodes.  That is, if you 
                        have pooling layers, then there will be fewer entries here than 
                        the total number of layers.
 \item layers: strings. Type of each hidden layer.  
-                       Options: dense, conv1d, conv2d, conv3d, conv2dtranspose, 
-                                conv3dtranspose, maxpool1d, maxpool2d, maxpool3d, 
-                                avgpool1d, avgpool2d, avgpool3d, flatten, 
-                                dropout, concretedropout
+                       For a list of valid options, see Section \ref{sec:layers}.
 \item lay\_params: list. Parameters for each layer (e.g., kernel size). 
                         For no parameter or the default, use None.
 \item activations: strings. Type of activation function per layer with nodes.
-                        Options: linear, relu, leakyrelu, elu, tanh, sigmoid, 
-                                 exponential, softsign, softplus, softmax
+                        For a list of valid options, see Section \ref{sec:activations}.
 \item act\_params: list. Parameters for each activation.  
                         Use None for no parameter or the default value.
                         Values specified only apply to LeakyReLU and ELU.
@@ -530,12 +555,14 @@ if generating data via BART, the user must create a BART configuration file
 \item optlayer: strings. Each layer's type during the optimization.  Must specify 
                        up to the maximum number of layers in the optimization.  Note 
                        that layer types are not varied during the optimization.
+                       For a list of valid options, see Section \ref{sec:layers}.
 \item optnnode: ints. List of numbers of nodes that will be considered during 
                          the optimization, separated by spaces.
 \item optmaxconvnode: ints. Maximum number of nodes (feature maps) for 
-                         convolutional layers.  This is used to avoid out of memory 
+                         convolutional layers.  This can be used to avoid out of memory 
                          issues.
-\item optactiv: strings. List of activation functions to consider during the optimization.
+\item optactiv: strings. List of activation functions to consider during the optimization.  
+                       For a list of valid options, see Section \ref{sec:activations}.
 \item optminlr: int. Minimum learning rate that will be considered in the optimization.  
                        Use None to keep the minimum learning rate fixed during the 
                        optimization (it will use `lengthscale' instead).  
@@ -548,6 +575,8 @@ if generating data via BART, the user must create a BART configuration file
 \item batch\_size : int.  Mini-batch size for training/validation steps.
 
 \item lengthscale: float. Minimum learning rate.
+\item min\_lr: float.  Minimum learning rate.  It is the same as `lengthscale`, it is only 
+                               a different way to specify this information.
 \item max\_lr     : float. Maximum learning rate.
 \item clr\_mode   : str.   Specifies the function to use for a cyclical learning rate 
                     (CLR).
@@ -611,12 +640,94 @@ if generating data via BART, the user must create a BART configuration file
                        Only used if `filters` is specified.
 \end{itemize}
 
+\subsubsection{Layers}
+\label{sec:layers}
+
+The allowed layer types, how they are specified in a MARGE configuration 
+file, whether the layer type has nodes, what layer parameter MARGE allows, and 
+the default layer parameter used when not specified by the user are provided 
+below.  For details on the specific implementation of each layer, refer to 
+\href{https://keras.io/api/layers/}{the relevant Keras documentation}.
+
+\begin{center}
+	\begin{tabular}{| l | l | l | l | l |}
+		\hline
+		Layer & MARGE configuration file option & Has nodes? & Layer parameter & Default layer parameter \\
+		\hline\hline
+		Dense or fully-connected & dense & Yes & n/a  & n/a\\
+		Dense concrete dropout & concretedropout & Yes & n/a & n/a \\
+		%Spatial concrete dropout & spatialconcretedropout & Yes & Kernel size & (3, 3) \\
+		1D convolutional & conv1d & Yes &  Kernel size & 3 \\
+		2D convolutional & conv2d & Yes &  Kernel size & (3, 3) \\
+		3D convolutional & conv3d & Yes &  Kernel size & (3, 3, 3) \\
+		2D convolutional transpose & conv2dtranspose & Yes &  Kernel size & (3, 3) \\
+		3D convolutional transpose & conv3dtranspose & Yes &  Kernel size & (3, 3, 3) \\
+		1D separable convolutional & separableconv1d & Yes &  Kernel size & 3 \\
+		2D separable convolutional & separableconv2d & Yes &  Kernel size & (3, 3) \\
+		1D depthwise convolutional & depthwiseconv1d & Yes &  Kernel size & 3 \\
+		2D depthwise convolutional & depthwiseconv2d & Yes &  Kernel size & (3, 3) \\
+		Dropout & dropout & No & n/a & n/a \\
+		1D max pooling & maxpool1d & No & Pooling size & 2 \\
+		2D max pooling & maxpool2d & No & Pooling size & (2, 2) \\
+		3D max pooling & maxpool3d & No & Pooling size & (2, 2, 2) \\
+		1D average pooling & avgpool1d & No & Pooling size & 2 \\
+		2D average pooling & avgpool2d & No & Pooling size & (2, 2) \\
+		3D average pooling & avgpool3d & No & Pooling size & (2, 2, 2) \\
+		Flatten & flatten & No & n/a & n/a \\
+		Batch normalization & batchnorm & No & n/a & n/a \\
+		\hline
+	\end{tabular}
+\end{center}
+
+
+\subsubsection{Activation functions}
+\label{sec:activations}
+
+The allowed activation functions and how they are specified in a MARGE 
+configuration file are provided below.  For convenience, some activation 
+functions can be specified multiple ways.  
+For details on the specific formula for each activation function, refer to the 
+\href{https://keras.io/api/layers/activations/}{relevant Keras documentation}.
+
+\begin{center}
+	\begin{tabular}{| l | l |}
+		\hline
+		Activation function & MARGE configuration file options \\
+		\hline\hline
+		Exponential linear unit & elu \\
+		Exponential & exponential, exp \\
+		Gaussian error linear unit & gelu \\
+		Gated linear unit & glu \\
+		Hard sigmoid & hard\_sigmoid, hardsigmoid, hardsig \\
+		Hard sigmoid linear unit (a.k.a. swish) & hard\_silu, hardsilu, hard\_swish, hardswish \\
+		Hard hyperbolic tangent & hard\_tanh, hardtanh \\
+		Leaky rectified linear unit & leaky\_relu, leakyrelu, lrelu \\
+		Linear & linear, identity, None \\
+		Logarithm of sigmoid & log\_sigmoid, logsigmoid, logsig \\
+		Logarithm of softmax & log\_softmax, logsoftmax \\
+		Mish & mish \\
+		Rectified linear unit & relu \\
+		Rectified linear unit truncated to a maximum value of 6 & relu6 \\
+		Scaled exponential linear unit & selu \\
+		Sigmoid & sigmoid, sig \\
+		Sigmoid linear unit (a.k.a. swish) & silu, swish \\
+		Softmax & softmax \\
+		Softplus & softplus \\
+		Softsign & softsign \\
+		SparsePlus & sparse\_plus, sparseplus \\
+		Sparsemax & sparsemax, sparse\_max \\
+		Hyperbolic tangent & tanh \\
+		Tanh shrink & tanh\_shrink, tanhshrink \\
+		\hline
+	\end{tabular}
+\end{center}
 
 
 \subsubsection{BART Configuration File}
 \label{sec:BARTconfig}
 
-The \href{https://exosports.github.io/BART/doc/BART_User_Manual.html}{BART User Manual} details the creation of a BART configuration file.  For 
+The \href{https://exosports.github.io/BART/doc/BART_User_Manual.html}{BART User Manual} 
+details the creation of a BART configuration file.  For 
 compatibility with MARGE, users must ensure two specific arguments are set 
 within the configuration file:
 \begin{itemize}
@@ -635,22 +746,30 @@ For an example, see Section \ref{sec:example}.
 
 
 
-\section{Program Outputs}
+\section{Files produced when running MARGE}
 \label{sec:outputs}
 
-MARGE produces the following outputs if all modes are executed:
+MARGE produces the following files, depending on the executed mode(s):
 
 \begin{itemize}
-\item .NPY files of the mean of training set inputs and outputs
-\item .NPY files of the standard deviation of training set inputs and outputs
-\item .NPY files of the minima of training set inputs and outputs
-\item .NPY files of the maxima of training set inputs and outputs
-\item .NPY files of the size of the training, validation, and test sets
-\item TFRecords files of the data set
-\item file containing the NN model and weights
-\item predicted and true spectra for the validation and test sets
-\item RMSE and R\^2 statistics over the validation and test sets
+  \item .NPY files of the mean of training set inputs and outputs (located in `inputdir`)
+  \item .NPY files of the standard deviation of training set inputs and outputs (located in `inputdir`)
+  \item .NPY files of the minima of training set inputs and outputs (located in `inputdir`)
+  \item .NPY files of the maxima of training set inputs and outputs (located in `inputdir`)
+  \item .NPY file of the sizes of the training, validation, and test sets (located in `inputdir`)
+  \item TFRecords files of the data set (located in `inputdir`)
+  \item a log file named YYYYMMDDThhmmss.log, where YYYY is the year, MM is the month, DD is the day, T stands for time to divide the date and time, hh is the hours, mm is the minutes, and ss is the seconds
+  \item file containing the NN model and weights (located in `outputdir`; for grid searches they will be in a nested directory named after the architecture)
+  \item The following output files are NOT produced for range tests, grid searches, or Bayesian optimizations:
+  \begin{itemize}
+    \item predicted and true targets (`y` dataset in NPZ files) for the validation and test sets (located in `outputdir`)
+    \item RMSE and R\^2 statistics over the validation and test sets (located in `outputdir`)
+  \end{itemize}
 \end{itemize}
+
+\noindent Note that the last 2 items in the above list are only produced when 
+the relevant flags are set (validflag for validation targets and statistics, 
+testflag for the test targets and statistics).
 
 \noindent If using BART for data generation, there will also be spectra.npy files produced.  For details on BART output, see the \href{https://exosports.github.io/BART/doc/BART_User_Manual.html}{BART User Manual}.
 
@@ -663,22 +782,21 @@ This section will describe these steps.
 
 \subsection{Model Grid Search}
 
-A model grid search is very helpful in determining model architectures that are 
+A model grid search is helpful in determining model architectures that are 
 well suited to the problem at hand.  In short, this process involves training 
 a variety of models (different layers, nodes, activation functions, batch 
 sizes, etc.) and finding which model(s) achieve(s) small loss values (and 
-therefore higher accuracy).  Because this process can involve training 
+therefore better performance).  Because this process can involve training 
 many models, it can be  helpful to use only a subset of the data (ensuring 
 it has similar statistical properties) and/or to train for fewer epochs than 
-normal (e.g., 20 -- 50, depending on the problem).  This will ensure that 
+normal (e.g., 20 -- 100, depending on the problem).  This will ensure that 
 models can be quickly trained, evaluated, and compared.  It is important 
 that these results are only compared across models trained for the same 
 number of epochs, using the same training and validation sets. \newline
 
 \noindent To perform a grid search, users must set the `gridsearch' 
 configuration key to True.  Then, each of the model architecture parameters 
-(config keys: architectures, nodes, layers, lay\_params, activations, 
-act\_params)
+(config keys: nodes, layers, lay\_params, activations, act\_params)
 will be sequentially considered, with a summary report produced once all 
 models have been trained.  Note that each model will be trained using the same 
 learning rate policy, so it is often a good idea to perform the grid search over
@@ -699,17 +817,24 @@ in a similar manner.\newline
 
 \noindent When executing the grid search configuration file, each model will 
 be trained.  At the end, MARGE outputs a summary of the minimum validation loss 
-for each model considered, allowing a straightforward comparison of the 
-architectures considered.\newline
+for each model considered (both in the log file and in gridsearch.txt in 
+`outputdir`), allowing a straightforward comparison of the architectures 
+considered.  In this file, the string identifiers for each architecture take the format of \newline
+\texttt{{\textless}layertype{\textgreater}-{\textless}layerparam{\textgreater}-nodes{\textless}\#{\textgreater}-{\textless}activation{\textgreater}{\textless}activationparam{\textgreater}--{\textless}nextlayer...{\textgreater}} \newline
+where items inside {\textless} {\textgreater} denote the user-specified variable. 
+For convolutional layers, the \texttt{layerparam} is formatted as, e.g., 
+\texttt{kernel3.3} for a 2D convolutional layer with a kernel size of (3, 3).
+Note that layer types and activation functions that do not have a parameter 
+will not have a corresponding layer parameter or activation parameter included 
+in this string identifier. \newline
 
 \noindent If this description seems confusing, it may be helpful to look at 
-the supplied configuration file, MARGE\_gridsearch.cfg, in the example directory.
-This file contains many different architectures, demonstrating how users 
-should format these configuration keys as well as an idea about what 
-architectures may be good to consider.  It is important to keep in mind that 
-the architectures included in this file are selected for the problem at hand, 
-so users may need to consider simpler or more complex models, depending on 
-their desired use case.
+the supplied configuration file, MARGE\_gridsearch.cfg, in the example 
+directories.  These files contains many different architectures, demonstrating 
+how users should format these configuration keys.  It is important to keep in 
+mind that the architectures included in this file are selected for the problem 
+at hand and are not exhaustive, so users may need to consider simpler or more 
+complex models, depending on their desired use case.
 
 
 \subsection{Bayesian Hyperparameter Optimization}
@@ -719,7 +844,7 @@ likely that a better model exists that was not considered in the grid search.
 To automate the exploration and selection process, MARGE offers a Bayesian 
 optimization via the Optuna package.  This requires that the user specifies the 
 boundaries of the optimization space, and then it is automatically explored in 
-a Bayesian way to determine optimal architectures for the problem.
+a Bayesian manner to determine optimal architecture(s) for the problem.
 
 \noindent To perform a Bayesian optimization, users must set the `optimization' 
 configuration file parameter to some positive integer, along with valid arguments 
@@ -740,10 +865,10 @@ for all other configuration file parameters that begin with `opt' (see Section
 \noindent The above settings would run the optimization for a total of 200 models, 
 each with 2--4 dense hidden layers with 32--2048 nodes, with activation functions 
 among those specified.  The learning rate would not be optimized here; rather, it 
-will use the CLR range specified by `lengthscale' and `max\_lr'.  In this 
-case, it is recommended to run multiple Bayesian optimizations with different 
-CLR parameters, as this will ensure the results are robust to the selected CLR 
-policy.
+will use the CLR range specified by `lengthscale' (or equivalently, `min\_lr') and 
+`max\_lr'.  In this case, it is recommended to run multiple Bayesian optimizations 
+with different CLR parameters, as this will ensure the results are robust to the 
+selected CLR policy.
 
 \noindent At the end of the Bayesian optimization, two files will be produced 
 in the output directory:
@@ -769,9 +894,15 @@ discussion about the CLR modes.  \newline
 \item epochs: set to a small number, like 10
 \item clr\_mode: triangular
 \item clr\_steps: range test
-\item lengthscale: set to a small number, like 1e-7
+\item lengthscale (or min\_lr): set to a small number, like 1e-7
 \item max\_lr: set to a value closer to 1, like 1e-1
 \end{itemize}
+
+\noindent For very large data sets, `epochs' could be set to a smaller number like 2--5, 
+while for small data sets, `epochs' may need to be a larger number like 30.  
+There is no harm in setting this to be larger than necessary, while setting it 
+smaller than necessary will limit the accuracy of the range test for the lower 
+bound due to undersampling. \newline
 
 \noindent When executing MARGE, there will be a plot produced of the loss vs. 
 learning rate value (history\_clr\_loss.png, in `plotdir').  It will look somewhat similar 
@@ -805,7 +936,100 @@ rate, it will not allow the weights to significantly change.  For this reason,
 we recommend that users select a slightly larger min value; in the example of 
 Figure \ref{fig:rangetest}, a value like 7e-4 -- 9e-4 would be a good choice 
 for the `triangular2' policy.  Similar precautions should be considered when 
-using other CLR modes that adjust the max rate.
+using other CLR modes that adjust the max rate. \newline
+
+\noindent Note that the range test as described here can require selecting a 
+larger minimum LR than suggested by the plot when working with data that 
+are not deterministic, such as observational data.  In this regime, at the 
+smallest learning rates, the model can overfit the validation data and have 
+poor generalization.
+
+
+\section{Using a MARGE model in another code}
+
+You've trained your model, and now you wish to use it as part of some other 
+code, possible on another system.  How is that done?
+
+\subsection{General information}
+\label{sec:generalusemodel}
+
+Keep in mind that inference using NNs is very fast. Thus, you do not necessarily 
+need a GPU on whatever system you plan to deploy your model on.  The only 
+hard requirement is that there is sufficient RAM to load your trained model. \newline
+
+\noindent When using the model, users must manually perform the desired data 
+pre-processing in the same way that MARGE does.  MARGE first applies any base-10 
+logarithmic transformations and then performs data scaling or normalization 
+on those data.  Note that the data statistics files saved in the inputs directory 
+were computed on the log-transformed data.  If both scaling and normalization 
+are applied, MARGE will first apply normalization and then apply scaling; users 
+must normalize the minima and maxima to achieve the proper transformation 
+in their code. \newline
+
+\noindent Users will also need to post-process the predictions in the same way 
+that MARGE does.  This follows the opposite order as the pre-processing: first 
+the data are de-scaled, then de-normalized, and finally any log-transforms are 
+undone by exponentiation.
+
+\subsection{Python}
+
+This is the simplest case.  First, ensure your environment is compatible with 
+MARGE.  To load the model in your code, there are two options: 
+
+\begin{itemize}
+	\item import TensorFlow and pass your \texttt{.keras} model weights file to 
+	    the \texttt{tensorflow.keras.models.load\_model} function, ensuring you 
+	    pass any custom objects (e.g., non-standard loss functions, concrete 
+	    dropout layers) as a dictionary to the function's 
+	    \texttt{custom\_objects} keyword parameter, or
+	\item import MARGE.py and call the main MARGE function using a copy of your 
+	    configuration file with the following settings:
+	    \begin{itemize}
+	    	\item \texttt{NNModel = True}
+	    	\item \texttt{trainflag = False}
+	    	\item \texttt{validflag = False}
+	    	\item \texttt{testflag = False}
+	    \end{itemize}
+\end{itemize}
+
+\noindent The first of those is simplest for models without any custom loss 
+functions and/or layers, while the latter is simplest for models that use those 
+custom loss functions and/or layers.  To use the first option with custom 
+objects, the user will need to import the relevant custom objects from the 
+MARGE files, then assign them in a dictionary to keys that are named exactly 
+like the objects (e.g., to use the ``maxmse'' loss function, the dictionary would 
+be \texttt{\{ "maxmse" : losses.maxmse \}}).  In the latter case, the MARGE 
+function will return the loaded model.  Note that it will require some 
+additional RAM compared to the first option, since the NNModel object holds 
+more than just the model. \newline
+
+\noindent For pre- and post-processing data, users can make use of the relevant 
+functions in \texttt{utils.py}.  
+
+\subsection{Other languages}
+
+Specific instructions for your non-Python language of choice are not provided 
+at this time.  In general, users will need to search for a library that can read 
+in a Keras or ONNX model in their desired language.  Then, users will need to 
+implement transformation functions to apply the necessary transformations as 
+described in Section \ref{sec:generalusemodel}. \newline
+
+\noindent If a user finds a useful library for a language of their choice, please 
+consider informing the author so it can be mentioned here.  Below are two 
+such libraries that the author is aware of, but there are surely other, possibly 
+more feature-rich, libraries out there. \newline
+
+\noindent For C-based codes, users can consider the 
+\href{https://github.com/alrevuelta/cONNXr}{cONNXr library}.  Note that there 
+may be more recent and feature-rich libraries than cONNXr, so users are 
+encouraged to shop around.  If you find a particularly useful library to make 
+use of a MARGE-trained model, please let the author know so it can be 
+mentioned here. \newline
+
+\noindent For Fortran-based codes, the 
+\href{https://github.com/modern-fortran/neural-fortran}{neural-fortran library} 
+may be useful.  Like above, if a user finds another library that is useful, 
+please pass that information along so it can be included here.
 
 
 \section{FAQ}
@@ -851,47 +1075,51 @@ determined via a model grid search or Bayesian hyperparameter optimization.
 See Section \ref{sec:optarch} for details. \newline
 
 \noindent \textbf{Q: How do I decide on a batch size?} A: This is largely 
-selected empirically, as part of the grid search.  
+selected empirically, as part of the architecture optimization.  
 Large and small batch sizes each have their own pros 
 and cons, so it is generally a good idea to consider a few different sizes.  
 For some problems, larger batch 
-sizes can perform equivalently to smaller batch sizes yet train faster, due 
+sizes can perform equivalently to smaller batch sizes yet train faster due 
 to fewer training steps per epoch.  For other problems, smaller batch sizes 
 can achieve higher accuracy, as the mean squared error would be more sensitive 
 to cases that perform poorly.  A good starting point is to compare the 
 performance of batch sizes of 256 and 32.  Then, adjust it based on 
-observations.  On GPUs, calculations will be optimized for 2\^{}N batch 
+observations.  On GPUs, calculations will be optimized for $2^N$ batch 
 sizes.\newline
 
 \noindent \textbf{Q: My testing set size is X, but I'm not able to plot 
-the X-1 case.  Why?}  A: Because of some annoying limitations of the Tensorflow 
-version used in MARGE, the data subsets are truncated to ensure an integer 
-number of batches.  For example, if we have 15,000 test cases and are using a 
-batch size of 256, the test set will really only have 14,848 cases (exactly 58 
-batches).  A future update to MARGE's Tensorflow version may correct this 
-limitation. \newline
+the X-1 case.  Why?}  A: Because of some annoying limitations of the TensorFlow 
+version originally used in MARGE, the data subsets are truncated to ensure an 
+integer number of batches.  For example, if we have 15,000 test cases and are 
+using a batch size of 256, the test set will really only have 14,848 cases 
+(exactly 58 batches).  This behavior may be changed in a future version of 
+MARGE, depending on whether or not TensorFlow has corrected this limitation. \newline
 
-\noindent \textbf{Q: I changed the batch size/data split/data normalization 
-and now my results look horrible (e.g., negative $R^2$ values)!  What 
-happened?}  A: For efficiency, MARGE 
-does not produce new TFRecords or .NPY statistics files with each run; if 
-they already exist, they are re-used to save compute time.  If you adjust the 
-batch size, data split, or data normalization, this will adjust how the code 
-works internally, but these important input files will remain unchanged, leading 
-to strange behavior (e.g., negative $R^2$ values).  Whenever adjusting anything 
-related to the inputs, it is advised to delete the TFRecords and .NPY statistics
-files so that they are re-computed for the adjusted inputs. \newline
+% An update to MARGE has made the following obsolete, but it is kept here 
+% for posterity
+%\noindent \textbf{Q: I changed the batch size/data split/data normalization 
+%and now my results look horrible (e.g., negative $R^2$ values)!  What 
+%happened?}  A: For efficiency, MARGE 
+%does not produce new TFRecords or .NPY statistics files with each run; if 
+%they already exist, they are re-used to save compute time.  If you adjust the 
+%batch size, data split, or data normalization, this will adjust how the code 
+%works internally, but these important input files will remain unchanged, leading 
+%to strange behavior (e.g., negative $R^2$ values).  Whenever adjusting anything 
+%related to the inputs, it is advised to delete the TFRecords and .NPY statistics
+%files so that they are re-computed for the adjusted inputs. \newline
 
 \noindent \textbf{Q: I'm on Mac, and I'm hitting an OMP error.  How do 
 I fix this?}  A: See the Mac subsection in Section \ref{sec:install}.  Mac has 
 OpenMP installed, which can conflict with some package in the conda 
-environment.  The solution is to install the `nomkl' conda package.  \newline
+environment.  The solution is to install the `nomkl' conda package.  
+If this doesn't work for you, please contact the lead author.  \newline
 
 \noindent \textbf{Q: When I try to train a model, I get an ``unable to create 
 file'' error.  What's going on?}  A: The most likely cause would be that the 
 filename is too long, or that the directory the weights are being saved into 
 does not exist.  The latter can only happen when specifying an absolute path 
-for the weight file. 
+for the weight file to some location that isn't the `inputdir` or `outputdir` 
+specified in the configuration file.
 
 
 \section{Be Kind}

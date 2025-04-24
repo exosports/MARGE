@@ -55,12 +55,34 @@ import sys, os
 import multiprocessing as mp
 import functools
 import glob
+import logging
+logging.setLoggerClass(logging.Logger)
+import types
 import numpy as np
 import pickle
 import scipy.stats as ss
 import tensorflow as tf
 
 import loader as L
+import custom_logger as CL
+logging.setLoggerClass(CL.MARGE_Logger)
+
+logger = logging.getLogger('MARGE.'+__name__)
+
+
+# Dictionary of layer names, with the value a bool whether it has nodes or not
+# spatialconcretedropout does not currently work w/ TFv2 - needs to be updated
+layer_types_has_nodes = {
+            "dense" : True, "dropout" : False, 
+            "concretedropout" : True, #"spatialconcretedropout" : True, 
+            "conv1d" : True, "conv2d" : True, "conv3d" : True, 
+            "conv2dtranspose" : True, "conv2dtranspose" : True, 
+            "separableconv1d" : True, "separableconv2d" : True, 
+            "depthwiseconv1d" : True, "depthwiseconv2d" : True, 
+            "maxpool1d" : False, "maxpool2d" : False, "maxpool3d" : False,
+            "avgpool1d" : False, "avgpool2d" : False, "avgpool3d" : False,
+            "flatten" : False, "batchnorm" : False
+}
 
 
 def make_dir(some_dir):
@@ -77,14 +99,16 @@ def make_dir(some_dir):
     Raises an error if the directory cannt be created.
     """
     try:
-      os.makedirs(some_dir)
+        os.makedirs(some_dir)
+        logger.info("Created directory: " + some_dir)
     except OSError as e:
-      if e.errno == 17: # Already exists
-        pass
-      else:
-        print("Cannot create folder '{:s}'. {:s}.".format(some_dir,
-                                              os.strerror(e.errno)))
-        sys.exit()
+        if e.errno == 17: # Already exists
+            logger.info("Directory already exists: " + some_dir)
+            pass
+        else:
+            logger.error("Cannot create directory: {:s}\n{:s}.".format(some_dir,
+                                                          os.strerror(e.errno)))
+            sys.exit(1)
     return
 
 
@@ -97,7 +121,9 @@ def load_path(key, basedir=""):
     if os.path.isabs(key):
         return key
     else:
-        return os.path.join(basedir, key)
+        pth = os.path.join(basedir, key)
+        logger.debug("Relative file path '" + key + "' assumed to be " + pth)
+        return pth
 
 
 def prepare_layers(layers, lay_params, nodes, activations=None, act_params=None):
@@ -122,27 +148,18 @@ def prepare_layers(layers, lay_params, nodes, activations=None, act_params=None)
     """
     # Check for allowed layer types
     for lay in layers:
-        if lay not in ["dense", "dropout",
-                       "concretedropout", "spatialconcretedropout", 
-                       "conv1d", "conv2d", "conv3d",
-                       "conv2dtranspose", "conv3dtranspose", 
-                       "maxpool1d", "maxpool2d", "maxpool3d",
-                       "avgpool1d", "avgpool2d", "avgpool3d",
-                       "flatten"]:
+        if lay not in layer_types_has_nodes.keys():
             raise TypeError('Invalid layer type specified.\n'    \
                           + 'Given layer type: ' + lay + '\n'    \
-                          + 'Allowed options:\ndense, dropout,\n'\
-                          + 'concretedropout, spatialconcretedropout,\n'
-                          + 'conv1d, conv2d, conv3d,\n'           \
-                          + 'conv2dtranspose, conv3dtranspose,\n' \
-                          + 'maxpool1d, maxpool2d, maxpool3d,\n' \
-                          + 'avgpool1d, avgpool2d, avgpool3d,\n' \
-                          + 'flatten')
+                          + 'Allowed options:\n'                 \
+                          + ', '.join(list(layer_types_has_nodes.keys())))
     # Make sure the right number of entries exist
-    nlay = layers.count("dense")  + layers.count("conv1d") + \
-           layers.count("conv2d") + layers.count("conv3d") + \
-           layers.count("conv2dtranspose") + layers.count("conv3dtranspose") + \
-           layers.count("concretedropout") + layers.count("spatialconcretedropout")
+    #nlay = layers.count("dense")  + layers.count("conv1d") + \
+    #       layers.count("conv2d") + layers.count("conv3d") + \
+    #       layers.count("conv2dtranspose") + layers.count("conv3dtranspose") + \
+    #       layers.count("concretedropout") + layers.count("spatialconcretedropout")
+    nlay = np.sum([layers.count(l) for l in layer_types_has_nodes.keys() \
+                   if layer_types_has_nodes[l]])
     if nlay != len(nodes):
         raise ValueError("Number of Dense/Conv layers does "  \
             + "not match the number of hidden\nlayers with " \
@@ -166,6 +183,8 @@ def prepare_layers(layers, lay_params, nodes, activations=None, act_params=None)
                     lay_params[j] = (2,2)
                 elif layers[j] in ['maxpool3d', 'avgpool3d']:
                     lay_params[j] = (2,2,2)
+                else:
+                    lay_params[j] = None
             elif layers[j] == 'dropout':
                 lay_params[j] = float(lay_params[j])
             else:
@@ -186,14 +205,13 @@ def prepare_layers(layers, lay_params, nodes, activations=None, act_params=None)
     return lay_params, activations
 
 
-def prepare_gridsearch(architectures, layers, lay_params, nodes, activations, act_params):
+def prepare_gridsearch(layers, lay_params, nodes, activations, act_params):
     """
     Helper function to ensure the set of architectures specified in the config
-    file are valid
+    file are valid.
 
     Inputs
     ------
-    architectures: list, strings.  Identifiers for each model architecture.
     layers, lay_params, nodes, activations, and act_params are lists of lists.
     See prepare_layers() for a description of individual list elements.
 
@@ -204,21 +222,18 @@ def prepare_gridsearch(architectures, layers, lay_params, nodes, activations, ac
     activations: like the input, except the strings are now function objects
     """
     # Check that there are the proper number of entries for each key
-    if len(architectures) != len(layers):
-        raise ValueError("Number of architecture names and sets " \
-                       + "of layers do not match.")
-    elif len(architectures) != len(lay_params):
-        raise ValueError("Number of architecture names and sets " \
-                       + "of layer parameters do not\nmatch.")
-    elif len(architectures) != len(nodes):
-        raise ValueError("Number of architecture names and sets " \
+    if len(layers) != len(lay_params):
+        raise ValueError("Number of sets of layers and sets " \
+                       + "of layer parameters do not match.")
+    elif len(layers) != len(nodes):
+        raise ValueError("Number of sets of layers and sets " \
                        + "of nodes do not match.")
-    elif len(architectures) != len(activations):
-        raise ValueError("Number of architecture names and sets " \
+    elif len(layers) != len(activations):
+        raise ValueError("Number of sets of layers and sets " \
                        + "of activations do not match.")
-    elif len(architectures) != len(act_params):
-        raise ValueError("Number of architecture names and sets " \
-                       + "of activation parameters do\nnot match.")
+    elif len(layers) != len(act_params):
+        raise ValueError("Number of sets of layers and sets " \
+                       + "of activation parameters do not match.")
     # Check that each architecture is consistent and able to be set up
     for i in range(len(nodes)):
         lay_params[i], activations[i] = prepare_layers(layers[i], lay_params[i],
@@ -306,7 +321,8 @@ def get_data_set_sizes(fsize, datadir, ishape, oshape, batch_size, ncores=1):
     valid_batches: int.  Number of batches in the validation set.
     test_batches : int.  Number of batches in the test       set.
     """
-    print('Loading files & calculating total number of batches...', flush=True)
+    logger.newline()
+    logger.info('Loading files & calculating total number of batches...')
     
     # Check if we can depend on `fsize` or if we need to (re)create it
 
@@ -333,13 +349,13 @@ def get_data_set_sizes(fsize, datadir, ishape, oshape, batch_size, ncores=1):
         raise ValueError("No test data provided.\n"+\
                          "Are you sure your data are located at\n"+\
                          datadir+'test'+os.sep+'*.npz?')
-
-    print("Data set sizes")
-    print("--------------")
-    print("Training   data:", num_train)
-    print("Validation data:", num_valid)
-    print("Testing    data:", num_test)
-    print("Total          :", num_train + num_valid + num_test)
+    
+    dset_str  = "Data set sizes:\n"
+    dset_str += "    Training   data: " + str(num_train).rjust(len(str(datsize.sum()))) + "\n"
+    dset_str += "    Validation data: " + str(num_valid).rjust(len(str(datsize.sum()))) + "\n"
+    dset_str += "    Testing    data: " + str(num_test).rjust(len(str(datsize.sum()))) + "\n"
+    dset_str += "    Total          : " + str(num_train + num_valid + num_test).rjust(len(str(datsize.sum())))
+    logger.info(dset_str)
     
     train_batches = num_train // batch_size
     valid_batches = num_valid // batch_size
@@ -501,8 +517,7 @@ def make_TFRecord(fname, files, ilog, olog,
     -------
     TFRecords files.
     """
-    if verb >= 1:
-        print("\nWriting TFRecords file...")
+    logger.info("Writing TFRecords files...")
 
     # Track number of files left to load
     filesleft = len(files)
@@ -510,11 +525,17 @@ def make_TFRecord(fname, files, ilog, olog,
     N_batches = 0
     count     = 0
 
+    prog = 0
+    fullbreak = False
     for i in range(int(np.ceil(len(files)/split))):
+        if fullbreak:
+            break
         # TFRecords file
         thisfile = fname.replace('.tfrecords', '_'+str(i).zfill(3)+'.tfrecords')
         writer = tf.io.TFRecordWriter(thisfile)
         for j in range(min(split, filesleft)):
+            if fullbreak:
+                break
             # Load file
             x, y = L.load_data_file(files[i*split+j], ilog, olog)
             if x.shape[0] != y.shape[0]:
@@ -529,16 +550,18 @@ def make_TFRecord(fname, files, ilog, olog,
                 assert x.dtype == xdtype, "x array data type in file "+files[i*split+j]+" does not match data type in file "+files[0]
                 assert y.dtype == ydtype, "y array data type in file "+files[i*split+j]+" does not match data type in file "+files[0]
             filesleft -= 1
-            # Print progress updates
-            if verb:
-                print(str(int(100/len(files)/split*(i + j/split))) + \
-                      "% complete", end='\r')
+            # Print progress updates every ~25%
+            new_prog = int(100/len(files)/split*(i + j/split))
+            if new_prog >= prog:
+                logger.info("  " + str(new_prog).rjust(3) + "% complete")
+                while new_prog >= prog:
+                    prog += 25
             # TF is lame and requires arrays to be 1D. Write each sequentially
             for k in range(x.shape[0]):
                 # Check for Nans
                 if np.any(np.isnan(x[k])) or np.any(np.isnan(y[k])):
-                    print("NaN alert!", files[i*split+j], k)
-                    sys.exit()
+                    logger.error("NaN found in file " + files[i*split+j] + " at index " + str(k))
+                    sys.exit(1)
                 # Define feature
                 feature = {'x'  : _bytes_feature(
                                         tf.compat.as_bytes(x[k].flatten().tostring())),
@@ -554,21 +577,21 @@ def make_TFRecord(fname, files, ilog, olog,
                     count      = 0
                     N_batches += 1
                 if N_batches==e_batches:
-                    writer.close()
-                    if verb:
-                        print("100% complete")
-                    if verb > 1:
-                        print("Ended writing TFRecords to ensure " + \
-                              "N*batch_size entries.")
-                        print("Writing TFRecords file complete.")
-                    return xdtype, ydtype
+                    fullbreak = True
+                    break
         writer.close()
-    if verb:
-        print("100% complete")
-    if verb > 1:
-        print("Writing TFRecords file complete.")
-        print(N_batches, 'batches written,', e_batches, 'batches expected.')
-        print(count, 'remaining count.')
+    logger.info("  100% complete")
+    if fullbreak:
+        logger.info("Ended writing TFRecords to ensure " + \
+                    "N*batch_size entries.")
+    logger.info("Writing TFRecords files complete.")
+    if N_batches != e_batches:
+        logger.warning(str(N_batches) + ' batches written, ' + str(e_batches) + ' batches expected.')
+    else:
+        logger.info(str(N_batches) + ' batches written.')
+    if count:
+        logger.info(str(count) + ' remaining count.')
+    logger.newline()
     return xdtype, ydtype
 
 
@@ -731,7 +754,7 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
     fvalid_TFR: list of strings.  TFRecords validation files.
     ftest_TFR:  list of strings.  TFRecords test       files.
     """
-    print('\nLoading TFRecords file names...', flush=True)
+    logger.info('Loading TFRecords file names...')
     TFRpath = os.path.join(inputdir, 'TFRecords', TFRfile)
     ftrain_TFR = glob.glob(TFRpath + 'train*.tfrecords')
     fvalid_TFR = glob.glob(TFRpath + 'valid*.tfrecords')
@@ -767,13 +790,15 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
         last_olog = last_log['olog']
         same_logarithm = np.all(last_ilog == ilog) and np.all(last_olog == olog)
         if not same_logarithm:
-            print("New logarithm pre-processing found.  Re-creating TFRecords.", flush=True)
+            logger.info("New logarithm pre-processing found.  Re-creating TFRecords.")
     
     # Modification time of this file
     last_changed = os.path.getmtime(__file__)
     
+    dset_name = ['train', 'valid', 'test']
+    
     if len(ftrain_TFR) == 0:
-        print("Making TFRecords for training data...", flush=True)
+        logger.info("Making TFRecords for training data...")
         make_train = True
     else:
         # Check most recent modification times
@@ -782,16 +807,16 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
                 
         if time_NPZ > time_TFR or last_changed > time_TFR:
             if time_NPZ > time_TFR:
-                print("Most recent training NPZ file is newer than training TFRecords.")
+                logger.info("Most recent training NPZ file is newer than training TFRecords.")
             elif last_changed > time_TFR:
-                print("Most recent change to utils.py is newer than training TFRecords.")
-            print("Re-creating TFRecords for training data...", flush=True)
+                logger.info("Most recent change to utils.py is newer than training TFRecords.")
+            logger.info("Re-creating TFRecords for training data...")
             # Delete all existing TFRecords
             for foo in ftrain_TFR:
                 try:
                     os.remove(foo)
                 except Exception as e:
-                    print("Error deleting", foo, ":", e)
+                    logger.error("Error deleting " + foo + ":\n" + str(e))
             make_train = True
         else:
             make_train = False
@@ -805,7 +830,7 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
         ydtype_train = None
 
     if len(fvalid_TFR) == 0:
-        print("\nMaking TFRecords for validation data...", flush=True)
+        logger.info("Making TFRecords for validation data...")
         make_valid = True
     else:
         # Check most recent modification times
@@ -813,16 +838,16 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
         time_TFR = os.path.getmtime(max(fvalid_TFR, key=os.path.getmtime))
         if time_NPZ > time_TFR or last_changed > time_TFR:
             if time_NPZ > time_TFR:
-                print("Most recent validation NPZ file is newer than validation TFRecords.")
+                logger.info("Most recent validation NPZ file is newer than validation TFRecords.")
             elif last_changed > time_TFR:
-                print("Most recent change to utils.py is newer than validation TFRecords.")
-            print("Re-creating TFRecords for validation data...", flush=True)
+                logger.info("Most recent change to utils.py is newer than validation TFRecords.")
+            logger.info("Re-creating TFRecords for validation data...")
             # Delete all existing TFRecords
             for foo in fvalid_TFR:
                 try:
                     os.remove(foo)
                 except Exception as e:
-                    print("Error deleting", foo, ":", e)
+                    logger.error("Error deleting " + foo + ":\n" + str(e))
             make_valid = True
         else:
             make_valid = False
@@ -836,7 +861,7 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
         ydtype_valid = None
 
     if len(ftest_TFR) == 0:
-        print("\nMaking TFRecords for test data...", flush=True)
+        logger.info("Making TFRecords for test data...")
         make_test = True
     else:
         # Check most recent modification times
@@ -844,16 +869,16 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
         time_TFR = os.path.getmtime(max(ftest_TFR, key=os.path.getmtime))
         if time_NPZ > time_TFR or last_changed > time_TFR:
             if time_NPZ > time_TFR:
-                print("Most recent test NPZ file is newer than test TFRecords.")
+                logger.info("Most recent test NPZ file is newer than test TFRecords.")
             elif last_changed > time_TFR:
-                print("Most recent change to utils.py is newer than test TFRecords.")
-            print("Re-creating TFRecords for test data...", flush=True)
+                logger.info("Most recent change to utils.py is newer than test TFRecords.")
+            logger.info("Re-creating TFRecords for test data...")
             # Delete all existing TFRecords
             for foo in ftest_TFR:
                 try:
                     os.remove(foo)
                 except Exception as e:
-                    print("Error deleting", foo, ":", e)
+                    logger.error("Error deleting " + foo + ":\n" + str(e))
             make_test = True
         else:
             make_test = False
@@ -868,31 +893,31 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
     
     # Ensure dtypes all match
     if (make_train and make_valid) or not same_logarithm:
-        assert xdtype_train == xdtype_valid, "Training x array dtype is "+\
+        assert xdtype_train == xdtype_valid, "X training set dtype is "+\
                                              str(xdtype_train)+\
-                                             ", but validation x array dtype "+\
+                                             ", but X validation set dtype "+\
                                              "is "+str(xdtype_valid)
-        assert ydtype_train == ydtype_valid, "Training y array dtype is "+\
+        assert ydtype_train == ydtype_valid, "Y training set dtype is "+\
                                              str(ydtype_train)+\
-                                             ", but validation y array dtype "+\
+                                             ", but Y validation set dtype "+\
                                              "is "+str(ydtype_valid)
     if (make_train and make_test) or not same_logarithm:
-        assert xdtype_train == xdtype_test,  "Training x array dtype is "+\
+        assert xdtype_train == xdtype_test,  "X training set dtype is "+\
                                              str(xdtype_train)+\
-                                             ", but test x array dtype is "+\
+                                             ", but X test set dtype is "+\
                                              str(xdtype_test)
-        assert ydtype_train == ydtype_test,  "Training y array dtype is "+\
+        assert ydtype_train == ydtype_test,  "Y training set dtype is "+\
                                              str(ydtype_train)+\
-                                             ", but test y array dtype is "+\
+                                             ", but Y test set dtype is "+\
                                              str(ydtype_test)
     if (make_valid and make_test) or not same_logarithm:
-        assert xdtype_valid == xdtype_test,  "Validation x array dtype is "+\
+        assert xdtype_valid == xdtype_test,  "X validation set dtype is "+\
                                              str(xdtype_valid)+\
-                                             ", but test x array dtype is "+\
+                                             ", but X test set dtype is "+\
                                              str(xdtype_test)
-        assert ydtype_valid == ydtype_test,  "Validation y array dtype is "+\
+        assert ydtype_valid == ydtype_test,  "Y validation set dtype is "+\
                                              str(ydtype_valid)+\
-                                             ", but test y array dtype is "+\
+                                             ", but Y test set dtype is "+\
                                              str(ydtype_test)
 
     # Compare vs. old dtypes, if applicable
@@ -917,26 +942,34 @@ def check_TFRecords(inputdir, TFRfile, datadir, ilog, olog,
         # Not all TFRecords were created this time
         # Check that dtypes are still consistent with the previous processing
         if last_xdtype is not None and xdtype is not None:
-            assert last_xdtype == xdtype, "X array dtype from the current "   +\
+            assert last_xdtype == xdtype, "X data set dtype from the current "+\
                                           "TFRecords processing does not "    +\
                                           "match the dtype from the previous "+\
                                           "processing."
         if last_ydtype is not None and ydtype is not None:
-            assert last_ydtype == ydtype, "Y array dtype from the current "   +\
+            assert last_ydtype == ydtype, "Y data set dtype from the current "+\
                                           "TFRecords processing does not "    +\
                                           "match the dtype from the previous "+\
                                           "processing."
 
 
     if make_train or make_valid or make_test or not same_logarithm:
-        print("\nTFRecords creation complete.", flush=True)
+        # Clear out the stats files so they can be (re-)created as well
+        fdel = glob.glob(os.path.join(inputdir, 'x*.npy')) + \
+               glob.glob(os.path.join(inputdir, 'y*.npy'))
+        for foo in fdel:
+            try:
+                os.remove(foo)
+            except Exception as e:
+                logger.error("Error deleting " + foo + ":\n" + str(e))
         # Save new ilog and olog files
         np.savez(flog.replace('.npz', ''), ilog=ilog, olog=olog)
         # Save dtype info so that it can be used when loading TFRecords
         np.savez(fdtype.replace('.npz', ''), xdtype=np.array([], dtype=xdtype), 
                                              ydtype=np.array([], dtype=ydtype))
+        logger.info("TFRecords creation complete.")
     else:
-        print("\nTFRecords already exist.", flush=True)
+        logger.info("TFRecords already exist.")
 
     return ftrain_TFR, fvalid_TFR, ftest_TFR
 
@@ -1022,3 +1055,4 @@ def write_ordered_optuna_summary(fout, trials, optlayer,
             foo.write(line4 + "\n")
             foo.write(div   + "\n")
     return
+

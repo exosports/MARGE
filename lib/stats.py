@@ -7,24 +7,30 @@ get_stats: Uses Welford's method to calculate the mean and standard deviation
 save_stats_files: Calls get_stats(), saves the results, and checks them for
                   issues.
 
-rmse: Calculates the RMSE for some predictions vs true values.
-
-r2: Calcualtes the coefficient of determination (R^2) for some predictions
-    vs true values.
+rmse_r2: Calculates the RMSE and coefficient of determination (R^2) for some 
+         predictions vs true values.
 
 """
 
 import sys, os
 import glob
+import logging
+logging.setLoggerClass(logging.Logger)
+import types
 import numpy as np
 import scipy.interpolate as si
 
 import tensorflow.keras.backend as K
 
 import utils as U
+import custom_logger as CL
+logging.setLoggerClass(CL.MARGE_Logger)
+
+logger = logging.getLogger('MARGE.'+__name__)
 
 
-def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=10, num_per_file=None, verb=False):
+def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=25, 
+              num_per_file=None, verb=0):
     """
     Uses Welford's method to calculate the mean and standard deviation (via the
     variance) of the entire dataset, without loading all data in memory at once.
@@ -50,7 +56,8 @@ def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=10, num_per
                        contain `num_per_file` cases per data file.
                        Prints warning if a file does not match the expected
                        value (requires verb > 0)
-    verb: bool or int. Flag that determines whether to print additional outputs.
+    verb: int. Determines whether to print updates (>=1) or not (0) during the 
+               function's execution.
 
     Outputs
     -------
@@ -93,45 +100,48 @@ def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=10, num_per
         data = np.load(datafiles[i])
         x = data['x']
         if np.any(np.isnan(x)):
-            raise ValueError("Data file " + datafiles[i] + " has nans in the inputs.")
+            raise ValueError("Data file " + datafiles[i] + " has nans in the X data set.")
         if np.any(np.isinf(x)):
-            raise ValueError("Data file " + datafiles[i] + " has infs in the inputs.")
+            raise ValueError("Data file " + datafiles[i] + " has infs in the X data set.")
         y = data['y']
         if np.any(np.isnan(y)):
-            raise ValueError("Data file " + datafiles[i] + " has nans in the outputs.")
+            raise ValueError("Data file " + datafiles[i] + " has nans in the Y data set.")
         if np.any(np.isinf(y)):
-            raise ValueError("Data file " + datafiles[i] + " has infs in the outputs.")
+            raise ValueError("Data file " + datafiles[i] + " has infs in the Y data set.")
         # Ensure proper shape
         if x.shape[0] != y.shape[0]:
             # This file is a single input/output case,
             # but isn't shaped to reflect this
-            raise ValueError("The inputs and outputs of this file do not "+\
-                             "have the same number of cases:\n"           +\
-                             datafiles[i])
+            raise ValueError("The X and Y data sets of this file do not " +\
+                             "have the same number of cases:\n" + datafiles[i])
         else:
             # This file has multiple data cases, ensure proper shape
             if x.shape[1:] != ishape:
-                raise ValueError("This file has improperly shaped input data:\n"+\
+                raise ValueError("This file has improperly shaped X data set:\n"+\
                                  datafiles[i]+ "\nExpected shape: " +\
                                  str(ishape) + "\nReceived shape: " + str(x.shape))
             if y.shape[1:] != oshape:
-                raise ValueError("This file has improperly shaped output data:\n"+\
+                raise ValueError("This file has improperly shaped Y data set:\n"+\
                                  datafiles[i]+ "\nExpected shape: " +\
                                  str(oshape) + "\nReceived shape: " + str(y.shape))
         # Take logs
         np.seterr(all='raise')
         if ilog:
-          try:
-            x[..., ilog] = np.log10(x[..., ilog])
-          except:
-            print("Problem foo:", datafiles[i])
-            sys.exit()
+            try:
+                x[..., ilog] = np.log10(x[..., ilog])
+            except Exception as e:
+                logger.error("Unable to perform the specified logarithmic " + \
+                             "transformation of the X data set in " + datafiles[i] + \
+                             ":\n" + str(e))
+                sys.exit(1)
         if olog:
-          try:
-            y[..., olog] = np.log10(y[..., olog])
-          except:
-            print("Problem foo:", datafiles[i])
-            sys.exit()
+            try:
+                y[..., olog] = np.log10(y[..., olog])
+            except Exception as e:
+                logger.error("Unable to perform the specified logarithmic " + \
+                             "transformation of the Y data set in " + datafiles[i] + \
+                             ":\n" + str(e))
+                sys.exit(1)
         # Update min/max
         if statsaxes == 'all':
             # Reshape to 2D for the calculations
@@ -144,10 +154,9 @@ def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=10, num_per
         # Consider each data vector in this file
         for j in range(x.shape[0]):
             if np.all(x[j] == 0):
-                if verb:
-                    print("This file has an input data vector of only zeros:", datafiles[i])
-                    print("Index:", j)
-                    print("Ignoring this file")
+                warn_msg  = datafiles[i] + " has an input data vector of only zeros "
+                warn_msg += "\nat index " + str(j) + "\nIgnoring this file."
+                logger.warning(warn_msg)
                 continue
             ncx    += 1
             xdelta  = x[j] - xmean
@@ -155,10 +164,9 @@ def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=10, num_per
             xM2     = xM2   + xdelta * (x[j] - xmean)
         for j in range(y.shape[0]):
             if np.all(y[j] == 0):
-                if verb:
-                    print("This file has an output data vector of only zeros:", datafiles[i])
-                    print("Index:", j)
-                    print("Ignoring this file")
+                warn_msg  = datafiles[i] + " has an output data vector of only zeros "
+                warn_msg += "\nat index " + str(j) + "\nIgnoring this file."
+                logger.warning(warn_msg)
                 continue
             ncy    += 1
             ydelta  = y[j] - ymean
@@ -166,17 +174,20 @@ def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=10, num_per
             yM2     = yM2   + ydelta * (y[j] - ymean)
             #M2     = M2   + (nc-1) * delta**2 / nc    # alt way to calc this
         # Print status updates
-        if verb and (100*i // len(datafiles)) >= (up+1)*perc:
+        if verb >= 3 and (100*i // len(datafiles)) >= (up+1)*perc:
             up += ((100*i // len(datafiles)) - up*perc) // perc
-            print(len(str(up*perc))*'-' + "----------")
-            print(str(up*perc)+"% complete")
-            print("mean:", xmean, ymean)
-            print("var :", xM2/(nc-1), yM2/(nc-1))
-            print(len(str(up*perc))*'-' + "----------")
+            update_str  = "Calculating stats " + str(up*perc)+"% complete\n"
+            update_str += "X mean: " + str(xmean) + "\n"
+            update_str += "X variance: " + str(xM2/(ncx-1)) + "\n"
+            update_str += "X min: " + str(xmin) + "\n"
+            update_str += "X max: " + str(xmax) + "\n"
+            update_str += "Y mean: " + str(ymean) + "\n"
+            update_str += "Y variance: " + str(yM2/(ncy-1)) + "\n"
+            update_str += "Y min: " + str(ymin) + "\n"
+            update_str += "Y max: " + str(ymax) + "\n"         
+            logger.info(update_str)
 
-    print('-----------------------------------------')
-    print('Completed mean/stdev/min/max calculations')
-    print('-----------------------------------------')
+    logger.info('Completed mean/stdev/min/max calculations.\n')
     xvariance = xM2 / (ncx - 1)
     yvariance = yM2 / (ncy - 1)
     xstd = xvariance**0.5
@@ -192,7 +203,8 @@ def get_stats(datafiles, ilog, olog, ishape, oshape, statsaxes, perc=10, num_per
 
 def save_stats_files(foos, ilog, olog, ishape, oshape,
                      fxmean, fxstd, fxmin, fxmax,
-                     fymean, fystd, fymin, fymax, statsaxes):
+                     fymean, fystd, fymin, fymax, statsaxes, 
+                     verb=0):
     """
     Saves out mean, standard deviation, minimum, and maximum files for the
     data set.
@@ -215,6 +227,7 @@ def save_stats_files(foos, ilog, olog, ishape, oshape,
     statsaxes: string. Determines which axes to compute stats over.
                        Options: all - all axes except last axis
                               batch - only 0th axis
+    verb : int.  
 
     Outputs
     -------
@@ -229,7 +242,8 @@ def save_stats_files(foos, ilog, olog, ishape, oshape,
     ymax   : arr, float. Maxima of the dataset outputs.
     """
     x_mean, x_std, x_min, x_max, \
-    y_mean, y_std, y_min, y_max  = get_stats(foos, ilog, olog, ishape, oshape, statsaxes)
+    y_mean, y_std, y_min, y_max  = get_stats(foos, ilog, olog, ishape, oshape, 
+                                             statsaxes, verb=verb)
     np.save(fxmean, x_mean)
     np.save(fymean, y_mean)
     np.save(fxstd,  x_std)

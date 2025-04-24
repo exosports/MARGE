@@ -14,6 +14,8 @@ plot: Simple plot of y vs. x values.
 """
 
 import sys, os, platform
+import logging
+logging.setLoggerClass(logging.Logger)
 import numpy as np
 import matplotlib as mpl
 if platform.system() == 'Darwin':
@@ -24,6 +26,11 @@ import scipy.signal      as ss
 from sklearn import metrics
 
 import stats as S
+
+import custom_logger as CL
+logging.setLoggerClass(CL.MARGE_Logger)
+
+logger = logging.getLogger('MARGE.'+__name__)
 
 # to allow plots with many points
 mpl.rcParams['agg.path.chunksize'] = 10000

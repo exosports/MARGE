@@ -14,7 +14,7 @@ Walkthrough
       python make_data.py
 
 2a. Run a range test to determine reasonable limits for the learning rate.
-      python ../../MARGE.py MARGE_rangetest.cfg > rangetest.log
+      python ../../MARGE.py MARGE_rangetest.cfg
 
 2b. Look at outputs_rangetest/plots/history_clr_loss.png.  The minimum learning rate 
     is when the loss begins decreasing.  The maximum learning rate is just before the 
@@ -24,14 +24,34 @@ Walkthrough
 
 3a. Optimize the model architecture for the learning rate range(s) selected in (2b).  
     This can be done using a grid search (less accurate) or a Bayesian optimization 
-    (more computationally expensive).  If you do not have a GPU on your machine, 
-    this will take a significant amount of time.  If you have multiple GPUs available, 
-    edit the configuration file to set `optngpus' to the number of GPUs you have.
-      python ../../MARGE.py MARGE_optimization.cfg > optimization.log
+    (potentially more computationally expensive).  If you do not have a GPU on your 
+    machine, this will take a significant amount of time.  
 
-3b. Look at outputs_optimization/optuna-ordered-summary.txt and see which architecture(s) 
-    performed best.  
+    To run the Bayesian optimization, use the command below.  If you have multiple 
+    GPUs available, edit the configuration file to set `optngpus' to the number of 
+    GPUs you have.
+        python ../../MARGE.py MARGE_optimization.cfg
 
-4. Update MARGE_run.cfg with the architecture(s) selected in (3b) and train in full.
-      python ../../MARGE.py MARGE_run.cfg > run.log
+    To run the grid search, use the command below.  Note that this is not exhaustive 
+    and is only provided as a simple example.  For real-world cases, you should 
+    consider many more architectures than are specified here.
+        python ../../MARGE.py MARGE_gridsearch.cfg
+
+3b. Look at the optimization results and see which architecture(s) performed best.
+
+    For a Bayesian optimization, that is located at 
+        outputs_optimization/optuna-ordered-summary.txt
+    This file is ordered by performance, so scroll to the bottom to see the best 
+    architectures.
+
+    For a grid search, that is located at 
+        outputs_gridsearch/gridsearch.txt
+    This file is ordered as specified in the configuration file, so you will need 
+    to scan the list and find the best architectures.
+
+3c. For a real problem, you might iterate a few times here, varying the learning 
+    rate policy, types of architectures considered, etc.
+
+4. Update MARGE_run.cfg with the architecture(s) selected above and train in full.
+      python ../../MARGE.py MARGE_run.cfg
 

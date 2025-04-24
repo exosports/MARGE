@@ -1,8 +1,8 @@
 Introduction
 ============
 
-This directory holds an example of how to run MARGE using BART for data 
-generation. It matches the use case demonstrated in Himes et al. (2022), except
+This directory holds an example of how to run MARGE, using BART for data 
+generation. It matches the use case demonstrated in Himes et al. (2020), except
 with reduced accuracy to reduce the runtime.
 
 ********************************** IMPORTANT **********************************
