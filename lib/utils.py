@@ -335,7 +335,8 @@ def get_data_set_sizes(fsize, datadir, ishape, oshape, batch_size, ncores=1):
         num_train = data_set_size(glob.glob(datadir + 'train' + os.sep + '*.npz'), ishape, oshape, ncores)
         num_valid = data_set_size(glob.glob(datadir + 'valid' + os.sep + '*.npz'), ishape, oshape, ncores)
         num_test  = data_set_size(glob.glob(datadir + 'test'  + os.sep + '*.npz'), ishape, oshape, ncores)
-        np.save(fsize, np.array([num_train, num_valid, num_test], dtype=int))
+        datsize   = np.array([num_train, num_valid, num_test], dtype=int)
+        np.save(fsize, datsize)
     
     if not num_train:
         raise ValueError("No training data provided.\n"+\
