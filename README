@@ -35,7 +35,6 @@ an NN surrogate model for radiative transfer (RT).
 MARGE comes with complete documentation as well as a user manual to assist 
 in its usage.  Users can find the latest MARGE User Manual at 
 https://exosports.github.io/MARGE/doc/MARGE_User_Manual.html.
-(Note: it is currently outdated, but updates are in progress.)
 
 MARGE is an open-source project that welcomes improvements from the community 
 to be submitted via pull requests on Github.  To be accepted, such improvements 
