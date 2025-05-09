@@ -187,7 +187,7 @@ def MARGE(confile):
                              "GPU, your system and/or environment may not be" + \
                              " set up correctly.")
                 sys.exit(1)
-            if use_cpu and gpu_detected:
+            if use_cpu and ngpu_detected:
                 logger.warning("GPU detected, but configuration file says to use the CPU.  " +\
                                "MARGE execution will be slower compared to using the GPU.\n")
             if use_cpu and trainflag:
