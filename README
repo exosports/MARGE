@@ -342,7 +342,7 @@ Himes et al. 2022, PSJ, 3, 91
 https://iopscience.iop.org/article/10.3847/PSJ/abe3fd/meta
 
 @ARTICLE{2022PSJ.....3...91H,
-       author = {{Himes}, Michael D. and {Harrington}, Joseph and {Cobb}, Adam D. and {G{\"u}ne{\c{s}} Baydin}, At{\i}l{\i}m and {Soboczenski}, Frank and {O'Beirne}, Molly D. and {Zorzan}, Simone and {Wright}, David C. and {Scheffer}, Zacchaeus and {Domagal-Goldman}, Shawn D. and {Arney}, Giada N.},
+       author = {{Himes}, Michael D. and {Harrington}, Joseph and {Cobb}, Adam D. and {Baydin}, At{\i}l{\i}m G{\"u}ne{\c{s}} and {Soboczenski}, Frank and {O'Beirne}, Molly D. and {Zorzan}, Simone and {Wright}, David C. and {Scheffer}, Zacchaeus and {Domagal-Goldman}, Shawn D. and {Arney}, Giada N.},
         title = "{Accurate Machine-learning Atmospheric Retrieval via a Neural-network Surrogate Model for Radiative Transfer}",
       journal = {\psj},
      keywords = {Exoplanet atmospheres, Bayesian statistics, Posterior distribution, Convolutional neural networks, Neural networks, 487, 1900, 1926, 1938, 1933},
