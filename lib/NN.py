@@ -656,7 +656,7 @@ def objective(trial, ftrain_TFR, fvalid_TFR, ftest_TFR,
         model.train(epochs, patience, save=False, parallel=True)
         return np.amin(model.historyNN.history['val_loss'])
     except Exception as e:
-        logger.error("Trial " + str(trial.number) + "failed with error:\n" + e)
+        logger.error("Trial " + str(trial.number) + "failed with error:\n" + str(e))
         return 1e100
 
 def driver(inputdir, outputdir, datadir, plotdir, preddir,
