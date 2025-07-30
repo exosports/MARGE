@@ -185,7 +185,7 @@ class NNModel:
         self.stop_file   = stop_file
 
         if lossfunc is None:
-            lossfunc = keras.losses.MeanSquaredError
+            lossfunc = keras.losses.MeanSquaredError()
             lossfunc.__name__ = 'mse'
         #else:
         #    self.lossfunc = lossfunc
@@ -382,7 +382,7 @@ class NNModel:
 
         # Compile model
         self.model.compile(optimizer=Adam(learning_rate=self.lengthscale, amsgrad=True),
-                           loss=lossfunc())
+                           loss=lossfunc)
         if self.verb:
             self.model.summary(print_fn=logger.info)
 

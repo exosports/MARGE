@@ -187,7 +187,7 @@ def MARGE(confile):
                              "GPU, your system and/or environment may not be" + \
                              " set up correctly.")
                 sys.exit(1)
-            if use_cpu and gpu_detected:
+            if use_cpu and ngpu_detected:
                 logger.warning("GPU detected, but configuration file says to use the CPU.  " +\
                                "MARGE execution will be slower compared to using the GPU.\n")
             if use_cpu and trainflag:
@@ -333,26 +333,30 @@ def MARGE(confile):
             model_evaluate = None
             if "lossfunc" in conf.keys():
                 # Format: path/to/module.py function_name
-                lossfunc = conf["lossfunc"].split()  # [path/to/module.py, function_name]
-                if lossfunc[0] == 'mse':
-                    lossfunc = keras.losses.MeanSquaredError
+                #      or string identifier
+                lossfunc = conf["lossfunc"].split()  # [path/to/module.py, function_name] or [string identifier]
+                # Handle string identifiers:
+                if lossfunc[0] in ['mse', 'mean_squared_error']:
+                    lossfunc = keras.losses.MeanSquaredError()
                     lossfunc.__name__ = 'mse'
-                elif lossfunc[0] == 'mae':
-                    lossfunc = keras.losses.MeanAbsoluteError
+                elif lossfunc[0] in ['mae', 'mean_absolute_error']:
+                    lossfunc = keras.losses.MeanAbsoluteError()
                     lossfunc.__name__ = 'mae'
-                elif lossfunc[0] == 'mape':
-                    lossfunc = keras.losses.MeanAbsolutePercentageError
+                elif lossfunc[0] in ['mape', 'mean_absolute_percent_error', 'mean_absolute_percentage_error']:
+                    lossfunc = keras.losses.MeanAbsolutePercentageError()
                     lossfunc.__name__ = 'mape'
-                elif lossfunc[0] == 'msle':
-                    lossfunc = keras.losses.MeanSquaredLogarithmicError
+                elif lossfunc[0] in ['msle', 'mean_squared_logarithmic_error', 'mean_squared_log_error']:
+                    lossfunc = keras.losses.MeanSquaredLogarithmicError()
                     lossfunc.__name__ = 'msle'
-                elif lossfunc[0] in ['maxmse', 'm3se', 'mslse', 'mse_per_ax', 'maxse']:
+                    # Handle the custom loss functions in lib/losses.py
+                elif lossfunc[0] in ['maxmse', 'm3se', 'mslse', 'mse_per_ax', 'maxse', 'smape', 'maxsape']:
                     lossname = lossfunc[0]
                     lossfunc = getattr(losses, lossfunc[0])
                     lossfunc.__name__ = lossname
                 elif lossfunc[0] in ['heteroscedastic', 'heteroscedastic_loss']:
                     lossfunc = functools.partial(losses.heteroscedastic_loss, D=np.product(oshape), N=batch_size)
                     lossfunc.__name__ = 'heteroscedastic_loss'
+                # Handle user-supplied custom loss functions
                 else:
                     if lossfunc[0][-3:] == '.py':
                         lossfunc[0] = lossfunc[0][:-3]   # path/to/module

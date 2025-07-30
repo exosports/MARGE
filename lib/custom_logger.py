@@ -24,6 +24,10 @@ class MARGE_Logger(logging.Logger):
                 if 'baseFilename' in handler.__dict__.keys():
                     self.flog = handler.__dict__['baseFilename']
                     self.level = handler.__dict__['level']
+            try:
+                _ = self.flog
+            except:
+                return
             # Set up blank-line handlers
             blank_file_handler   = logging.FileHandler(self.flog)
             blank_stream_handler = logging.StreamHandler(sys.stdout)
