@@ -24,6 +24,7 @@ class MARGE_Logger(logging.Logger):
                 if 'baseFilename' in handler.__dict__.keys():
                     self.flog = handler.__dict__['baseFilename']
                     self.level = handler.__dict__['level']
+            # Temp fix - Optuna+Dask initializes its logger later than expected, which then causes problems here
             try:
                 _ = self.flog
             except:
