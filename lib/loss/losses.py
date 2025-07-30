@@ -88,3 +88,14 @@ def heteroscedastic_loss(true, pred, D, N):
 
     return K.mean(quad + log_det, 0)
 
+def smape(y_true, y_pred):
+    epsilon = 1e-8  # Small constant to prevent division by zero
+    numerator = tf.abs(y_pred - y_true)
+    denominator = tf.abs(y_true) + tf.abs(y_pred) + epsilon
+    return K.mean(numerator / denominator) * 200
+
+def maxsape(y_true, y_pred):
+    epsilon = 1e-8  # Small constant to prevent division by zero
+    numerator = tf.abs(y_pred - y_true)
+    denominator = tf.abs(y_true) + tf.abs(y_pred) + epsilon
+    return K.max(numerator / denominator) * 200
