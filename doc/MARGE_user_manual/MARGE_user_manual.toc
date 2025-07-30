@@ -1,0 +1,28 @@
+\contentsline {section}{\numberline {1}Team Members}{2}{section.1}%
+\contentsline {section}{\numberline {2}Introduction}{2}{section.2}%
+\contentsline {section}{\numberline {3}Installation}{3}{section.3}%
+\contentsline {subsection}{\numberline {3.1}System Requirements}{3}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Install and Compile}{3}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Unix}{3}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Mac}{4}{subsubsection.3.2.2}%
+\contentsline {subsubsection}{\numberline {3.2.3}Windows}{4}{subsubsection.3.2.3}%
+\contentsline {section}{\numberline {4}Example}{5}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Quick Example}{5}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}BART Example}{6}{subsection.4.2}%
+\contentsline {section}{\numberline {5}Program Inputs}{7}{section.5}%
+\contentsline {subsection}{\numberline {5.1}MARGE Input Data Format}{7}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}MARGE Configuration File}{8}{subsection.5.2}%
+\contentsline {subsubsection}{\numberline {5.2.1}Layers}{12}{subsubsection.5.2.1}%
+\contentsline {subsubsection}{\numberline {5.2.2}Activation functions}{12}{subsubsection.5.2.2}%
+\contentsline {subsubsection}{\numberline {5.2.3}BART Configuration File}{13}{subsubsection.5.2.3}%
+\contentsline {section}{\numberline {6}Files produced when running MARGE}{13}{section.6}%
+\contentsline {section}{\numberline {7}Determining the Optimal Model Architecture}{14}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Model Grid Search}{14}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Bayesian Hyperparameter Optimization}{15}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}CLR Parameters}{16}{subsection.7.3}%
+\contentsline {section}{\numberline {8}Using a MARGE model in another code}{17}{section.8}%
+\contentsline {subsection}{\numberline {8.1}General information}{17}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Python}{18}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}Other languages}{18}{subsection.8.3}%
+\contentsline {section}{\numberline {9}FAQ}{19}{section.9}%
+\contentsline {section}{\numberline {10}Be Kind}{20}{section.10}%
