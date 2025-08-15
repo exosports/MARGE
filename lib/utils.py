@@ -256,6 +256,7 @@ def count_cases(foo, ishape, oshape):
         return x.shape[0]
     else:
         # File has a single case
+        """
         if x.shape != ishape:
             # Shapes don't match
             raise ValueError("This file has improperly shaped input data:\n"+\
@@ -270,6 +271,15 @@ def count_cases(foo, ishape, oshape):
                              "have the same number of cases:\n" + foo     +\
                              "\nInput  shape: "+str(x.shape)+
                              "\nOutput shape: "+str(y.shape))
+        """
+        raise ValueError("It appears as if each data file has a single case, but " +\
+                         "there is no explicit batch dimension to indicate that. " +\
+                         "Reshape your data to have a batch dimension at the " +\
+                         "zero-th axis and try again.\n" +\
+                         "Expected input  shape: (Nbatch," + str(ishape).replace('(', '') + '\n' +\
+                         "Received input  shape: " + str(x.shape) + '\n' +\
+                         "Expected output shape: (Nbatch," + str(oshape).replace('(', '') + '\n' +\
+                         "Received output shape: " + str(y.shape) + '\n')
 
 
 def data_set_size(foos, ishape, oshape, ncores=1):
